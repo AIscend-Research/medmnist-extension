@@ -317,20 +317,28 @@ def run_all(cfg: Optional[Config] = None,
     res_list = cfg.topfer_resolutions
     key = "_".join(map(str, res_list))
 
+    def _build_multi(idxs, imgs):
+        """One survey pass for ALL resolutions, flattened into a single array.
+
+        Calling generalize_multi_batch inside the per-resolution comprehension
+        would re-survey the images once per resolution, which is exactly the
+        O(R x cost) the multi-target API exists to avoid.
+        """
+        d = generalize_multi_batch(
+            imgs[idxs], res_list, n_jobs=cfg.n_jobs,
+            equal_fidelity=cfg.equal_fidelity,
+            exaggeration_gamma=cfg.exaggeration_gamma,
+            displacement_lambda=cfg.displacement_lambda,
+            coherence_floor=cfg.coherence_floor)
+        return np.concatenate([d[r].reshape(len(idxs), -1) for r in res_list], axis=1)
+
     multi = {}
     for split, idxs, imgs in (("train", tidx, src.images("train")),
                               ("val", np.arange(len(y["val"])), src.images("val")),
                               ("test", teidx, src.images("test"))):
-        arr = cached(
+        arr = np.asarray(cached(
             P.cache / f"topfer_{split}_{key}_{len(idxs)}.npy",
-            lambda i=idxs, im=imgs: np.concatenate([
-                generalize_multi_batch(im[i], res_list, n_jobs=cfg.n_jobs,
-                                       equal_fidelity=cfg.equal_fidelity,
-                                       exaggeration_gamma=cfg.exaggeration_gamma,
-                                       displacement_lambda=cfg.displacement_lambda,
-                                       coherence_floor=cfg.coherence_floor)[r]
-                .reshape(len(i), -1) for r in res_list], axis=1))
-        arr = np.asarray(arr)
+            lambda i=idxs, im=imgs: _build_multi(i, im)))
         offs, cur = {}, 0
         for r in res_list:
             sz = spec.n * r * r
