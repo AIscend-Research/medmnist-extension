@@ -127,9 +127,40 @@ def sheet_title(fig, title: str, subtitle: str = "", plate: str = "") -> None:
                  va="top", family="serif", style="italic")
 
 
-def caption(fig, text: str, y: float = 0.016) -> None:
-    fig.text(0.5, y, text, fontsize=7.6, color=INK_2, ha="center", va="bottom",
-             family="serif", wrap=True)
+def caption(fig, text: str, y: float = 0.022, width_frac: float = 0.84,
+            fontsize: float = 7.6) -> None:
+    """Footer note, hard-wrapped to stay inside the neatline.
+
+    matplotlib's `wrap=True` measures against the figure width, not against the
+    drawn frame, so a centred caption happily runs out through the border. Wrap
+    it explicitly instead, estimating the character budget from the figure's
+    physical width.
+    """
+    import textwrap
+    inches = fig.get_size_inches()[0] * width_frac
+    chars = max(40, int(inches / (fontsize * 0.0075)))
+    fig.text(0.5, y, "\n".join(textwrap.wrap(text, chars)), fontsize=fontsize,
+             color=INK_2, ha="center", va="bottom", family="serif",
+             linespacing=1.5)
+
+
+def structure_key(fig, entries, y: float = 0.905, fontsize: float = 7.4) -> None:
+    """Horizontal symbology key, drawn in the sheet header.
+
+    Belongs to the figure rather than to a panel: a legend tucked inside one
+    image panel covers the very data it is explaining.
+    """
+    n = len(entries)
+    span = min(0.62, 0.1 * n)
+    x0 = 0.5 - span / 2
+    step = span / max(1, n - 1) if n > 1 else 0
+    for i, (label, color) in enumerate(entries):
+        x = x0 + i * step
+        fig.add_artist(Rectangle((x - 0.011, y - 0.004), 0.009, 0.009,
+                                 transform=fig.transFigure, facecolor=color,
+                                 edgecolor=INK, lw=0.4, zorder=900))
+        fig.text(x + 0.002, y, label, fontsize=fontsize, color=INK, va="center",
+                 ha="left", family="serif")
 
 
 def scalebar(ax, image_px: int, field_mm: float = FIELD_MM,

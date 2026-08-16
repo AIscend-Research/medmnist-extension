@@ -66,12 +66,37 @@ def test_augmentation_is_equivariant(kind):
     assert np.abs(got[dens] - want[dens]).mean() < 0.02, \
         float(np.abs(got[dens] - want[dens]).mean())
 
-    ori = [i for i in range(spec.n) if spec.names[i].endswith("::cos2theta")
-           or spec.names[i].endswith("::sin2theta")]
-    drawn = (np.abs(got[ori] - 0.5) > 0.02) & (np.abs(want[ori] - 0.5) > 0.02)
-    if drawn.sum() > 20:
-        err = np.abs(got[ori][drawn] - want[ori][drawn]).mean()
-        assert err < 0.06, float(err)
+    # Orientation is compared only where a bearing is *well posed*: on the
+    # interior, and where the pooled resultant is clearly above the coherence
+    # floor in both sheets. A cell whose resultant is near zero has no single
+    # bearing to preserve — the synthetic mesh is a separable sin·sin pattern,
+    # so it is genuinely bi-directional and its circular mean flips between two
+    # equally good modes on numerical noise. Testing those cells would measure
+    # tie-breaking, not the double-angle algebra this test exists to pin.
+    interior = np.zeros(got.shape[-2:], dtype=bool)
+    interior[2:-2, 2:-2] = True
+
+    checked = 0
+    for sname in ("pigment_network", "streaks", "vessels"):
+        ci = [i for i in spec.groups[sname] if spec.names[i].endswith("::cos2theta")][0]
+        si = [i for i in spec.groups[sname] if spec.names[i].endswith("::sin2theta")][0]
+
+        def decode(a):
+            return a[ci] * 2 - 1, a[si] * 2 - 1
+
+        gc, gs = decode(got)
+        wc, ws = decode(want)
+        m = (np.hypot(gc, gs) > 0.35) & (np.hypot(wc, ws) > 0.35) & interior
+        if m.sum() < 10:
+            continue
+        checked += int(m.sum())
+        # angular error on the projective line, via the double-angle vectors
+        dot = (gc[m] * wc[m] + gs[m] * ws[m]) / (
+            np.hypot(gc[m], gs[m]) * np.hypot(wc[m], ws[m]))
+        ang = np.degrees(np.arccos(np.clip(dot, -1, 1))) / 2.0    # back to θ
+        assert np.median(ang) < 5.0, (sname, float(np.median(ang)))
+
+    assert checked > 20, f"too few well-posed bearings to test ({checked})"
 
 
 def test_undrawn_bearing_survives_augmentation():

@@ -177,20 +177,25 @@ SOURCE_DIAGRAM = FidelityContract(
         "glance where the chart cannot be trusted."
     ),
     preserves=[
-        "an explicit, per-cell record of whether the native image locally met "
-        "the sampling and contrast floor each structure requires",
+        "an explicit, per-cell record of whether the ACQUISITION could have "
+        "detected each structure here, had it been present — noise floor and "
+        "8-bit quantisation step against the structure's minimum contrast",
     ],
     sacrifices=[
         "nothing — this channel adds information rather than removing it. It "
         "is the honest accounting of what the other five operators cost.",
     ],
     invariant=(
-        "certificate == min(sampling_margin, contrast_margin) per cell, and "
-        "is computed from the native image only, never from labels"
+        "certificate == min(noise_margin, quant_margin) over all structures, "
+        "computed from the native image only, never from labels, and never "
+        "from whether the structure is actually present — a chart is not "
+        "untrustworthy merely because the sea floor is flat there"
     ),
     parameters={
-        "sampling_margin": "log2(local band-limited energy / sensor noise floor)",
-        "contrast_margin": "log2(local band-limited RMS contrast / structure floor)",
+        "noise_margin": "log2(structure contrast floor x sqrt(footprint) / "
+                        "local noise floor)",
+        "quant_margin": "log2(structure contrast floor / L* step of one 8-bit "
+                        "code at this luminance), minus a clipping penalty",
     },
     citation="IHO S-57 CATZOC / S-4 source diagrams; Harley (1989) for the "
              "argument that omitting one is itself a rhetorical act",

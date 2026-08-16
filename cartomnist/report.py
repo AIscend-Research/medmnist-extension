@@ -210,7 +210,8 @@ def write_html(out: Dict, figures_dir: Path, path: Path) -> Path:
 
     tiles = [
         (f"{float(gr.get('fraction_of_224_gap_recovered_at_28', float('nan'))):.0%}"
-         if np.isfinite(gr.get("fraction_of_224_gap_recovered_at_28", np.nan)) else "—",
+         if np.isfinite(gr.get("fraction_of_224_gap_recovered_at_28", np.nan))
+         else "no gap",
          "of the rare-class gap that 224² buys, recovered at 28²",
          f"naive {f(ev['naive']['rare_recall'])} → generalized "
          f"{f(ev['generalized']['rare_recall'])} → 224 {f(ev['native224']['rare_recall'])}",
