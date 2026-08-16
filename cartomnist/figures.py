@@ -659,6 +659,14 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
     ax = fig.add_subplot(gs[1])
     rs = np.array(sorted(law["kstar"]), dtype=float)
     ks = np.array([law["kstar"][int(r)] for r in rs], dtype=float)
+    if len(rs) == 0:
+        ax.axis("off")
+        ax.text(0.5, 0.5, "no resolution produced a usable K*\n"
+                          "(every symbol budget scored within noise of the others)",
+                ha="center", va="center", fontsize=9, color=S.INK_2)
+        S.sheet_title(fig, "The Radical Law, Applied to Benchmarks", "", plate="Plate VII")
+        S.neatline(fig)
+        return S.save(fig, outdir / "fig07_topfer.png")
     ax.plot(rs, ks, "o", color="#eb6834", ms=9, markeredgecolor=S.PAPER,
             markeredgewidth=1.4, zorder=6)
     S.direct_label(ax, rs[-1], ks[-1], "measured K*", "#eb6834")

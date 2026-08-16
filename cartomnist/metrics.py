@@ -14,6 +14,9 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
+# np.trapz was renamed in NumPy 2.0; Kaggle images are not always on 2.x.
+_trapz = getattr(np, "trapezoid", None) or np.trapz
+
 
 # --------------------------------------------------------------------------
 # Calibration
@@ -152,8 +155,8 @@ def coverage_risk(score: np.ndarray, probs: np.ndarray, y: np.ndarray,
         bal.append(1.0 - float(np.mean(rec)))
     covs, risks, bal = map(np.asarray, (covs, risks, bal))
     return {"coverage": covs, "risk": risks, "balanced_risk": bal,
-            "aurc": float(np.trapezoid(risks, covs) / (covs[-1] - covs[0])),
-            "balanced_aurc": float(np.trapezoid(bal, covs) / (covs[-1] - covs[0]))}
+            "aurc": float(_trapz(risks, covs) / (covs[-1] - covs[0])),
+            "balanced_aurc": float(_trapz(bal, covs) / (covs[-1] - covs[0]))}
 
 
 # --------------------------------------------------------------------------
