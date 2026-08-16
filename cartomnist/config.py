@@ -40,8 +40,16 @@ class Paths:
 
     @property
     def cache(self) -> Path:
-        # Deliberately OUTSIDE `out/` so the downloadable bundle never
-        # contains multi-GB tensors or checkpoints.
+        """Scratch for multi-GB intermediate tensors.
+
+        Deliberately OUTSIDE `out/` so the downloadable bundle never contains
+        them. On Kaggle it goes to /kaggle/temp, which is not persisted into the
+        notebook's output — so a committed run uploads the report, not 4 GB of
+        cached float32.
+        """
+        kaggle_tmp = Path("/kaggle/temp")
+        if kaggle_tmp.exists():
+            return kaggle_tmp / "carto_cache"
         return self.root / "carto_cache"
 
     def mkdirs(self) -> "Paths":

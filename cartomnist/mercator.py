@@ -38,17 +38,38 @@ from .filterbanks import STRUCTURE_NAMES
 
 
 # --------------------------------------------------------------------------
-def _design_matrix(x: np.ndarray) -> np.ndarray:
-    """Flatten (N, C, H, W) to (N, C*H*W) with a bias column."""
-    n = len(x)
-    f = np.asarray(x, dtype=np.float32).reshape(n, -1)
-    return np.concatenate([f, np.ones((n, 1), dtype=np.float32)], axis=1)
+def _patch_features(x: np.ndarray, k: int = 3) -> np.ndarray:
+    """(N, C, H, W) -> (N*H*W, C*k*k + 1): each cell's k x k neighbourhood.
+
+    The probe is deliberately *local and translation-invariant* rather than a
+    whole-image regression. A whole-image ridge has C*H*W features (14k at 18
+    channels) against N images, which at any realistic N is wildly
+    under-determined — the regularisation, not the representation, would decide
+    the answer. The local form has C*k*k features (162) against N*H*W samples
+    (millions), so the fit is over-determined by four orders of magnitude and
+    the number it returns is about the representation.
+
+    It also asks the right question: can the structure content of *this cell* be
+    recovered from what the regime kept *near this cell*.
+    """
+    x = np.asarray(x, dtype=np.float32)
+    n, c, h, w = x.shape
+    pad = k // 2
+    xp = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), mode="edge")
+    feats = np.empty((n, c * k * k, h, w), dtype=np.float32)
+    i = 0
+    for dy in range(k):
+        for dx in range(k):
+            feats[:, i * c:(i + 1) * c] = xp[:, :, dy:dy + h, dx:dx + w]
+            i += 1
+    flat = feats.transpose(0, 2, 3, 1).reshape(n * h * w, c * k * k)
+    return np.concatenate([flat, np.ones((len(flat), 1), dtype=np.float32)], axis=1)
 
 
 def _ridge_fit(X: np.ndarray, Y: np.ndarray, lam: float = 1.0) -> np.ndarray:
     d = X.shape[1]
-    A = X.T @ X + lam * np.eye(d, dtype=np.float64)
-    return np.linalg.solve(A, X.T @ Y.astype(np.float64))
+    A = X.T.astype(np.float64) @ X + lam * np.eye(d)
+    return np.linalg.solve(A, X.T.astype(np.float64) @ Y.astype(np.float64))
 
 
 def _standardize_rows(Y: np.ndarray) -> np.ndarray:
@@ -77,7 +98,8 @@ def _per_row_r2(Y: np.ndarray, P: np.ndarray) -> np.ndarray:
 
 def retention(regime_train: np.ndarray, regime_test: np.ndarray,
               target_train: np.ndarray, target_test: np.ndarray,
-              lam: float = 10.0) -> np.ndarray:
+              lam: float = 10.0, n_fit_images: int = 400,
+              batch: int = 256, seed: int = 0) -> np.ndarray:
     """Per-image R^2 of reconstructing the native structure layout from a regime.
 
     The target is the *un-normalised* native structure map (see
@@ -85,13 +107,27 @@ def retention(regime_train: np.ndarray, regime_test: np.ndarray,
     train and evaluated per test image, so no regime can win by memorising the
     test set, and none can win by having produced the target itself.
     """
-    Xtr, Xte = _design_matrix(regime_train), _design_matrix(regime_test)
-    Ytr = _standardize_rows(np.asarray(target_train, np.float32)
-                            .reshape(len(target_train), -1))
+    rng = np.random.default_rng(seed)
+    tr = np.asarray(regime_train, dtype=np.float32)
+    n_fit = min(n_fit_images, len(tr))
+    sel = np.sort(rng.choice(len(tr), n_fit, replace=False))
+
+    Xtr = _patch_features(tr[sel])
+    Ytr = _standardize_rows(np.asarray(target_train, np.float32)[sel]
+                            .reshape(n_fit, -1)).reshape(-1)
+    W = _ridge_fit(Xtr, Ytr[:, None], lam)
+    del Xtr
+
+    te = np.asarray(regime_test, dtype=np.float32)
     Yte = _standardize_rows(np.asarray(target_test, np.float32)
-                            .reshape(len(target_test), -1))
-    W = _ridge_fit(Xtr, Ytr, lam)
-    return _per_row_r2(Yte, Xte @ W)
+                            .reshape(len(te), -1))
+    cells = te.shape[-1] * te.shape[-2]
+    out = np.empty(len(te), dtype=np.float32)
+    for a in range(0, len(te), batch):
+        b = min(a + batch, len(te))
+        pred = (_patch_features(te[a:b]) @ W).reshape(b - a, cells)
+        out[a:b] = _per_row_r2(Yte[a:b], pred)
+    return out
 
 
 # --------------------------------------------------------------------------
