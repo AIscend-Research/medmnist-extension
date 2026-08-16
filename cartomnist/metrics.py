@@ -22,8 +22,15 @@ _trapz = getattr(np, "trapezoid", None) or np.trapz
 # Calibration
 # --------------------------------------------------------------------------
 def fit_temperature(logits: np.ndarray, y: np.ndarray,
-                    lo: float = 0.05, hi: float = 10.0, iters: int = 200) -> float:
-    """Golden-section search on validation NLL. One parameter, no autograd."""
+                    lo: float = 0.02, hi: float = 100.0, iters: int = 300) -> float:
+    """Golden-section search on validation NLL. One parameter, no autograd.
+
+    The bracket is deliberately wide. A model that is barely better than chance
+    wants a very large temperature, and a narrow bracket silently returns its
+    own upper bound — which then shows up in the reliability plate as a
+    suspiciously round T and is easy to misread as a real fit. `evaluate`
+    records whether the optimum landed on the bracket edge.
+    """
     def nll(T: float) -> float:
         z = logits / T
         z = z - z.max(axis=1, keepdims=True)
@@ -244,6 +251,7 @@ def evaluate(logits: np.ndarray, y: np.ndarray, *, regime: str, n_classes: int,
     gaps = [v for v in ita_bacc.values() if np.isfinite(v)]
     ita_gap = float(max(gaps) - min(gaps)) if len(gaps) >= 2 else float("nan")
 
+    at_bound = bool(T <= 0.021 or T >= 99.0)
     ev = Evaluation(
         regime=regime, n=int(len(y)),
         accuracy=float((probs.argmax(1) == y).mean()),
@@ -257,6 +265,7 @@ def evaluate(logits: np.ndarray, y: np.ndarray, *, regime: str, n_classes: int,
         per_class_auc=[float(v) for v in pca],
         ita_balanced_accuracy=ita_bacc, ita_auc=ita_auc, ita_gap=ita_gap,
         ita_ece=ita_ece,
+        extra={"temperature_at_search_bound": float(at_bound)},
     )
     return ev, {"probs": probs, "raw_probs": raw_probs,
                 "reliability": rel, "reliability_raw": rel_raw}

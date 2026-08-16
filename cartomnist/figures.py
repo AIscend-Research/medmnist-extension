@@ -641,9 +641,9 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
 def fig_reliability(outdir: Path, rel: Dict[str, Dict], evals: Dict[str, object]) -> Path:
     S.use_style()
     keys = [k for k in ("naive", "generalized", "native224") if k in rel]
-    fig = plt.figure(figsize=(4.5 * len(keys), 5.6))
+    fig = plt.figure(figsize=(4.5 * len(keys), 6.3))
     gs = GridSpec(2, len(keys), figure=fig, hspace=0.1, wspace=0.22,
-                  left=0.07, right=0.975, top=0.83, bottom=0.11,
+                  left=0.07, right=0.975, top=0.85, bottom=0.16,
                   height_ratios=[3, 1])
 
     for k, key in enumerate(keys):
