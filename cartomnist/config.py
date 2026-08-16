@@ -1,0 +1,131 @@
+"""Global configuration for the cartographic generalization pipeline.
+
+Everything the experiment needs to be reproducible lives here. The notebook
+overrides a handful of fields; nothing else in the package reads globals.
+"""
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import List
+
+
+# --------------------------------------------------------------------------
+# Where things live
+# --------------------------------------------------------------------------
+def _default_root() -> Path:
+    for cand in ("/kaggle/working", os.environ.get("CARTO_ROOT", "")):
+        if cand and Path(cand).exists():
+            return Path(cand)
+    return Path.cwd()
+
+
+@dataclass
+class Paths:
+    root: Path = field(default_factory=_default_root)
+
+    @property
+    def out(self) -> Path:
+        return self.root / "carto_out"
+
+    @property
+    def figures(self) -> Path:
+        return self.out / "figures"
+
+    @property
+    def results(self) -> Path:
+        return self.out / "results"
+
+    @property
+    def cache(self) -> Path:
+        # Deliberately OUTSIDE `out/` so the downloadable bundle never
+        # contains multi-GB tensors or checkpoints.
+        return self.root / "carto_cache"
+
+    def mkdirs(self) -> "Paths":
+        for p in (self.out, self.figures, self.results, self.cache):
+            p.mkdir(parents=True, exist_ok=True)
+        return self
+
+
+# --------------------------------------------------------------------------
+# The experiment
+# --------------------------------------------------------------------------
+@dataclass
+class Config:
+    # ---- data
+    dataset: str = "dermamnist"
+    native_size: int = 224          # the "1:10,000 survey"
+    target_size: int = 28           # the "1:1,000,000 chart"
+    n_classes: int = 7
+
+    # subsampling (FAST mode on Kaggle's 30h/week GPU budget)
+    max_train: int = 0              # 0 == use all
+    max_val: int = 0
+    max_test: int = 0
+
+    # ---- generalization
+    equal_fidelity: bool = True     # per-image robust normalisation of symbols
+    exaggeration_gamma: float = 0.55
+    displacement_lambda: float = 0.6
+    coherence_floor: float = 0.15   # below this, orientation is not drawn
+    selection_k: int = 0            # 0 == keep all structures (Töpfer sweep overrides)
+
+    # ---- training
+    epochs_small: int = 25
+    epochs_native: int = 8
+    batch_size: int = 256
+    batch_size_native: int = 64
+    lr: float = 3e-3
+    lr_native: float = 3e-4
+    weight_decay: float = 1e-4
+    label_smoothing: float = 0.0    # keep 0 — we care about calibration
+    class_weighted_loss: bool = True
+    seeds: List[int] = field(default_factory=lambda: [0, 1, 2])
+    amp: bool = True
+
+    # ---- Töpfer sweep
+    topfer_resolutions: List[int] = field(default_factory=lambda: [7, 14, 28, 56])
+    topfer_k_values: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5])
+    topfer_epochs: int = 12
+    topfer_seeds: List[int] = field(default_factory=lambda: [0])
+
+    # ---- calibration / abstention
+    n_reliability_bins: int = 15
+    temperature_scale: bool = True
+
+    # ---- ITA stratification
+    ita_bins: str = "fitzpatrick"   # "fitzpatrick" | "tertile"
+
+    # ---- misc
+    n_jobs: int = 0                 # 0 == os.cpu_count()
+    fast: bool = False
+    run_isic_validation: bool = True
+    device: str = "auto"
+
+    paths: Paths = field(default_factory=lambda: Paths().mkdirs())
+
+    # ------------------------------------------------------------------
+    def apply_fast(self) -> "Config":
+        """Shrink the experiment so the whole notebook fits in ~40 GPU-minutes."""
+        self.fast = True
+        self.max_train, self.max_val, self.max_test = 3000, 800, 1500
+        self.epochs_small, self.epochs_native = 12, 3
+        self.seeds = [0]
+        self.topfer_resolutions = [7, 14, 28]
+        self.topfer_k_values = [0, 2, 5]
+        self.topfer_epochs = 6
+        return self
+
+    def to_json(self, path: Path | None = None) -> str:
+        d = {k: v for k, v in asdict(self).items() if k != "paths"}
+        d["paths_root"] = str(self.paths.root)
+        s = json.dumps(d, indent=2, default=str)
+        if path is not None:
+            Path(path).write_text(s)
+        return s
+
+
+CFG = Config()
