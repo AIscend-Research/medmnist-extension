@@ -1,1 +1,11 @@
-.venv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+carto_cache/
+carto_out/
+smoke_out/
+*.npy
+*.npz
+*.zip
+.DS_Store
