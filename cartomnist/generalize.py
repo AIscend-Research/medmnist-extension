@@ -18,6 +18,7 @@ import numpy as np
 
 from . import operators as ops
 from .filterbanks import STRUCTURES, STRUCTURE_NAMES, survey
+from .parallel import concat_arrays, concat_dicts, map_chunks
 from .sufficiency import source_diagram
 
 
@@ -227,52 +228,23 @@ def generalize_multi(rgb: np.ndarray,
 
 def generalize_multi_batch(rgbs, targets: Sequence[int], n_jobs: int = 0,
                            **kw) -> Dict[int, np.ndarray]:
-    n = len(rgbs)
-    if n_jobs in (0, None):
-        n_jobs = max(1, (os.cpu_count() or 2))
-
-    def _run(idx):
-        parts = [generalize_multi(rgbs[i], targets, **kw) for i in idx]
+    def _run(chunk):
+        parts = [generalize_multi(chunk[i], targets, **kw) for i in range(len(chunk))]
         return {t: np.stack([p[t] for p in parts]) for t in targets}
 
-    if n_jobs == 1:
-        return _run(np.arange(n))
-    try:
-        from joblib import Parallel, delayed
-    except ImportError:
-        return _run(np.arange(n))
-    chunks = [c for c in np.array_split(np.arange(n), n_jobs * 4) if len(c)]
-    parts = Parallel(n_jobs=n_jobs, backend="loky")(delayed(_run)(c) for c in chunks)
-    return {t: np.concatenate([p[t] for p in parts], axis=0) for t in targets}
+    parts = map_chunks(rgbs, _run, n_jobs)
+    return concat_dicts(parts, targets)
 
 
 # --------------------------------------------------------------------------
-def generalize_batch(rgbs, target=28, n_jobs=0, **kw) -> np.ndarray:
-    """Generalize a stack of images, in parallel when joblib is available.
+def generalize_batch(rgbs, target: int = 28, n_jobs: int = 0, **kw) -> np.ndarray:
+    """Generalize a stack of images. `rgbs` may be an array or any indexable
+    sequence of (H, W, 3) images."""
+    def _run(chunk):
+        return np.stack([generalize(chunk[i], target=target, **kw)
+                         for i in range(len(chunk))])
 
-    `rgbs` may be a numpy array (N, H, W, 3) or any indexable sequence.
-    """
-    n = len(rgbs)
-    if n_jobs in (0, None):
-        import os
-        n_jobs = max(1, (os.cpu_count() or 2))
-    try:
-        from joblib import Parallel, delayed
-    except ImportError:
-        return np.stack([generalize(rgbs[i], target=target, **kw) for i in range(n)])
-
-    if n_jobs == 1:
-        return np.stack([generalize(rgbs[i], target=target, **kw) for i in range(n)])
-
-    chunks = np.array_split(np.arange(n), n_jobs * 4)
-    chunks = [c for c in chunks if len(c)]
-
-    def _run(idx):
-        return np.stack([generalize(rgbs[i], target=target, **kw) for i in idx])
-
-    parts = Parallel(n_jobs=n_jobs, backend="loky", verbose=0)(
-        delayed(_run)(c) for c in chunks)
-    return np.concatenate(parts, axis=0)
+    return concat_arrays(map_chunks(rgbs, _run, n_jobs))
 
 
 # --------------------------------------------------------------------------
@@ -296,23 +268,12 @@ def raw_structure_maps(rgb: np.ndarray, target: int = 28,
 def raw_structure_maps_batch(rgbs, target: int = 28, n_jobs: int = 0,
                              structures: Sequence[str] = tuple(STRUCTURE_NAMES)
                              ) -> Dict[str, np.ndarray]:
-    n = len(rgbs)
-    if n_jobs in (0, None):
-        n_jobs = max(1, (os.cpu_count() or 2))
-
-    def _run(idx):
-        parts = [raw_structure_maps(rgbs[i], target, structures) for i in idx]
+    def _run(chunk):
+        parts = [raw_structure_maps(chunk[i], target, structures)
+                 for i in range(len(chunk))]
         return {s: np.stack([p[s] for p in parts]) for s in structures}
 
-    if n_jobs == 1:
-        return _run(np.arange(n))
-    try:
-        from joblib import Parallel, delayed
-    except ImportError:
-        return _run(np.arange(n))
-    chunks = [c for c in np.array_split(np.arange(n), n_jobs * 4) if len(c)]
-    parts = Parallel(n_jobs=n_jobs, backend="loky")(delayed(_run)(c) for c in chunks)
-    return {s: np.concatenate([p[s] for p in parts], axis=0) for s in structures}
+    return concat_dicts(map_chunks(rgbs, _run, n_jobs), structures)
 
 
 # --------------------------------------------------------------------------

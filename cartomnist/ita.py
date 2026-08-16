@@ -59,20 +59,13 @@ def image_ita(rgb: np.ndarray) -> float:
 
 
 def batch_ita(rgbs, n_jobs: int = 0) -> np.ndarray:
-    n = len(rgbs)
-    if n_jobs in (0, None):
-        import os
-        n_jobs = max(1, (os.cpu_count() or 2))
-    if n_jobs == 1:
-        return np.array([image_ita(rgbs[i]) for i in range(n)], dtype=np.float32)
-    try:
-        from joblib import Parallel, delayed
-    except ImportError:
-        return np.array([image_ita(rgbs[i]) for i in range(n)], dtype=np.float32)
-    chunks = [c for c in np.array_split(np.arange(n), n_jobs * 4) if len(c)]
-    parts = Parallel(n_jobs=n_jobs, backend="loky")(
-        delayed(lambda idx: [image_ita(rgbs[i]) for i in idx])(c) for c in chunks)
-    return np.concatenate([np.asarray(p, dtype=np.float32) for p in parts])
+    from .parallel import concat_arrays, map_chunks
+
+    def _run(chunk):
+        return np.array([image_ita(chunk[i]) for i in range(len(chunk))],
+                        dtype=np.float32)
+
+    return concat_arrays(map_chunks(rgbs, _run, n_jobs))
 
 
 # --------------------------------------------------------------------------

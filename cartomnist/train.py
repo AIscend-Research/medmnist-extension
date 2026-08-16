@@ -99,7 +99,12 @@ class ArrayDataset(Dataset):
         return len(self.y)
 
     def __getitem__(self, i: int):
-        a = np.asarray(self.x[i], dtype=np.float32)
+        # `copy=True` is required, not defensive: the cached tensors are opened
+        # with mmap_mode="r", so a plain view is read-only and backed by the
+        # cache file. Both the zero-channel ablation and the augmenter write in
+        # place, and writing through a read-only mapping kills the process with
+        # SIGBUS and a truncated traceback.
+        a = np.array(self.x[i], dtype=np.float32, copy=True)
         if a.ndim == 3 and a.shape[-1] in (1, 3) and a.shape[0] not in (1, 3):
             a = np.transpose(a, (2, 0, 1))        # HWC -> CHW (raw 224 uint8)
         if a.max() > 1.5:
