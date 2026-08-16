@@ -91,6 +91,7 @@ def scale_periods(native_size: int) -> Dict[str, float]:
 # Cached Gabor kernels
 # --------------------------------------------------------------------------
 _GABOR_CACHE: Dict[tuple, list] = {}
+_GABOR_FFT_CACHE: Dict[tuple, tuple] = {}
 
 
 def _gabor_bank(period: float, n_theta: int = 6, bandwidth: float = 1.0):
@@ -105,6 +106,56 @@ def _gabor_bank(period: float, n_theta: int = 6, bandwidth: float = 1.0):
                             np.imag(k).astype(np.float32)))
         _GABOR_CACHE[key] = kernels
     return _GABOR_CACHE[key]
+
+
+def _gabor_energy_fft(img: np.ndarray, period: float, n_theta: int = 6,
+                      bandwidth: float = 1.0):
+    """Complex Gabor energy for the whole bank, via one forward FFT.
+
+    The bank is ~12 convolutions of a 224² image with ~25² kernels, which in the
+    spatial domain was 80% of the entire pipeline's runtime. Transforming the
+    image once and reusing it against cached kernel spectra cuts that by roughly
+    an order of magnitude, which is the difference between the Kaggle run being
+    twenty minutes of CPU and ninety.
+
+    Boundary handling differs from `ndimage.convolve(mode="reflect")`: this is
+    zero-padded linear convolution. That is fine, and arguably better, because
+    the input has already been band-passed (`Lb = L - gaussian(L)`) and is
+    therefore near zero at the frame edge. Zero padding is also exactly
+    equivariant under the dihedral group, which the augmentation test relies on.
+    """
+    from scipy import fft as sfft
+
+    bank = _gabor_bank(period, n_theta, bandwidth)
+    kh = max(k.shape[0] for _, k, _ in bank)
+    kw = max(k.shape[1] for _, k, _ in bank)
+    h, w = img.shape
+    fshape = (sfft.next_fast_len(h + kh - 1), sfft.next_fast_len(w + kw - 1))
+
+    key = (round(period, 3), n_theta, bandwidth, fshape)
+    if key not in _GABOR_FFT_CACHE:
+        specs = []
+        for theta, kr, ki in bank:
+            # Each orientation's kernel has its own shape — a 0-degree kernel
+            # is the transpose of a 90-degree one — so each must be cropped at
+            # ITS OWN centre. Using one global offset for the whole bank shifts
+            # orientations relative to each other by a pixel or two, which does
+            # not change the energy much but corrupts the bearing, and does so
+            # asymmetrically, so the result is no longer mirror-equivariant.
+            specs.append((theta, sfft.rfft2(kr, s=fshape),
+                          sfft.rfft2(ki, s=fshape),
+                          (kr.shape[0] - 1) // 2, (kr.shape[1] - 1) // 2))
+        _GABOR_FFT_CACHE[key] = tuple(specs)
+    specs = _GABOR_FFT_CACHE[key]
+
+    fimg = sfft.rfft2(img, s=fshape)
+    energies, thetas = [], []
+    for theta, sr, si, y0, x0 in specs:
+        re = sfft.irfft2(fimg * sr, s=fshape)[y0:y0 + h, x0:x0 + w]
+        im = sfft.irfft2(fimg * si, s=fshape)[y0:y0 + h, x0:x0 + w]
+        energies.append(np.hypot(re, im).astype(np.float32))
+        thetas.append(theta)
+    return np.stack(energies, 0), np.asarray(thetas, dtype=np.float32)
 
 
 # --------------------------------------------------------------------------
@@ -238,20 +289,13 @@ def pigment_network(lab: np.ndarray, period: float) -> Dict[str, np.ndarray]:
     structure tensor of the winning orientation gives the bearing."""
     L = _luminance(lab)
     Lb = L - ndi.gaussian_filter(L, period * 1.5)      # band-pass, kill shading
-    energies = []
-    thetas = []
-    for theta, kr, ki in _gabor_bank(period):
-        re = ndi.convolve(Lb, kr, mode="reflect")
-        im = ndi.convolve(Lb, ki, mode="reflect")
-        energies.append(np.hypot(re, im))
-        thetas.append(theta)
-    E = np.stack(energies, 0)                          # (T, H, W)
+    E, thetas = _gabor_energy_fft(Lb, period)          # (T, H, W)
     density = E.max(0)
 
     # bearing: circular mean over the bank in double-angle space
     w = E - E.mean(0, keepdims=True)
     w = np.clip(w, 0, None)
-    th = np.asarray(thetas, dtype=np.float32)[:, None, None]
+    th = thetas[:, None, None]
     c = (w * np.cos(2 * th)).sum(0)
     s = (w * np.sin(2 * th)).sum(0)
     n = w.sum(0) + 1e-12

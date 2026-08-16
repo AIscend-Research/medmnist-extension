@@ -162,3 +162,29 @@ def test_source_diagram_is_label_free():
     a = source_diagram(img, 28)["certificate"]
     b = source_diagram(img.copy(), 28)["certificate"]
     assert np.array_equal(a, b)
+
+
+# ---- the FFT Gabor path must agree with plain spatial convolution ---------
+def test_gabor_fft_matches_spatial_convolution():
+    """The bank is evaluated by FFT for speed. Pin it against the obvious
+    implementation, because a mis-centred kernel changes the energy barely at
+    all while corrupting the bearing — which is exactly the bug this caught."""
+    from scipy import ndimage as ndi
+
+    from cartomnist.filterbanks import _gabor_bank, _gabor_energy_fft
+
+    rng = np.random.default_rng(0)
+    img = ndi.gaussian_filter(rng.standard_normal((160, 160)), 1.2).astype(np.float32)
+    period = 6.0
+
+    got, thetas = _gabor_energy_fft(img, period)
+    for k, (theta, kr, ki) in enumerate(_gabor_bank(period)):
+        assert np.isclose(thetas[k], theta)
+        want = np.hypot(ndi.convolve(img, kr, mode="constant"),
+                        ndi.convolve(img, ki, mode="constant"))
+        # interior only: the FFT path is zero-padded linear convolution, which
+        # matches mode="constant" everywhere except within a kernel radius of
+        # the frame
+        m = slice(20, -20)
+        rel = np.abs(got[k][m, m] - want[m, m]).max() / (want[m, m].max() + 1e-9)
+        assert rel < 1e-4, (k, float(rel))

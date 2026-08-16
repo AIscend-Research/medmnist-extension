@@ -154,12 +154,28 @@ def fit_scale_law(points: Sequence[TopferPoint], frac: float = 0.99,
     rs = np.array(sorted(kstar), dtype=float)
     ks = np.array([kstar[int(r)] for r in rs], dtype=float)
 
-    alpha = float("nan")
-    intercept = float("nan")
-    if len(rs) >= 2 and np.all(ks > 0):
-        A = np.vstack([np.log(rs), np.ones_like(rs)]).T
-        coef, *_ = np.linalg.lstsq(A, np.log(ks), rcond=None)
-        alpha, intercept = float(coef[0]), float(coef[1])
+    def _loglog(x, y):
+        A = np.vstack([np.log(x), np.ones_like(x)]).T
+        coef, *_ = np.linalg.lstsq(A, np.log(y), rcond=None)
+        return float(coef[0]), float(coef[1])
+
+    # The power-law fit is on log K*, so resolutions where no symbol budget paid
+    # for itself (K* = 0) cannot enter it. Those are reported rather than
+    # silently dropped, and a shifted fit on log(K* + 1) is always defined so
+    # the plate still has a curve to draw.
+    alpha = intercept = float("nan")
+    pos = ks > 0
+    diagnostic = ""
+    if pos.sum() >= 2:
+        alpha, intercept = _loglog(rs[pos], ks[pos])
+    else:
+        diagnostic = (
+            f"Only {int(pos.sum())} of {len(rs)} resolutions had K* > 0, so the "
+            "unshifted power law is undefined. Either the symbols bought nothing "
+            "at these resolutions, or the sweep is underpowered — check that the "
+            "K=0 arm is not already at ceiling.")
+    alpha_shifted, intercept_shifted = (_loglog(rs, ks + 1.0) if len(rs) >= 2
+                                        else (float("nan"), float("nan")))
 
     # anchor Töpfer at the largest measured resolution
     topfer_curve = {}
@@ -171,6 +187,10 @@ def fit_scale_law(points: Sequence[TopferPoint], frac: float = 0.99,
     return {"kstar": {int(k): int(v) for k, v in kstar.items()},
             "curves": {int(k): v for k, v in curves.items()},
             "alpha": alpha, "log_intercept": intercept,
+            "alpha_shifted": alpha_shifted,
+            "log_intercept_shifted": intercept_shifted,
+            "n_resolutions_with_positive_kstar": int(pos.sum()),
+            "diagnostic": diagnostic,
             "topfer_alpha": 0.5, "topfer_curve": topfer_curve,
             "frac_of_max": frac, "source_resolution": source_resolution,
             "interpretation": (

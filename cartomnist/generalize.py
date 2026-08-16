@@ -19,7 +19,12 @@ import numpy as np
 from . import operators as ops
 from .filterbanks import STRUCTURES, STRUCTURE_NAMES, survey
 from .parallel import concat_arrays, concat_dicts, map_chunks
-from .sufficiency import source_diagram
+from .sufficiency import CERT_TEMPERATURE_STOPS, source_diagram
+
+
+def _squash(margin: np.ndarray) -> np.ndarray:
+    """Stops of margin -> [0, 1], on the same scale as the certificate."""
+    return (1.0 / (1.0 + np.exp(-margin / CERT_TEMPERATURE_STOPS))).astype(np.float32)
 
 
 # --------------------------------------------------------------------------
@@ -67,7 +72,8 @@ def channel_spec(structures: Sequence[str] = tuple(STRUCTURE_NAMES),
 
     if with_source_diagram:
         start = len(names)
-        names += ["source::sampling", "source::contrast", "source::certificate"]
+        names += ["source::noise_margin", "source::quant_margin",
+                  "source::certificate"]
         groups["source_diagram"] = [start, start + 1, start + 2]
     else:
         groups["source_diagram"] = []
@@ -143,9 +149,8 @@ def generalize(rgb: np.ndarray,
     sd = None
     if with_source_diagram:
         sd = source_diagram(rgb, target, native_size=native)
-        squash = lambda m: (1.0 / (1.0 + np.exp(-m))).astype(np.float32)
-        planes.append(squash(sd["sampling"].min(axis=0)))
-        planes.append(squash(sd["contrast"].min(axis=0)))
+        planes.append(_squash(sd["sampling"].min(axis=0)))
+        planes.append(_squash(sd["contrast"].min(axis=0)))
         planes.append(sd["certificate"])
 
     out = np.stack(planes, 0).astype(np.float32)
@@ -217,9 +222,8 @@ def generalize_multi(rgb: np.ndarray,
 
         if with_source_diagram:
             sd = source_diagram(rgb, target, native_size=native)
-            squash = lambda m: (1.0 / (1.0 + np.exp(-m))).astype(np.float32)
-            planes += [squash(sd["sampling"].min(axis=0)),
-                       squash(sd["contrast"].min(axis=0)), sd["certificate"]]
+            planes += [_squash(sd["sampling"].min(axis=0)),
+                       _squash(sd["contrast"].min(axis=0)), sd["certificate"]]
 
         t = np.stack(planes, 0).astype(np.float32)
         out[target] = np.clip(np.nan_to_num(t, nan=0.0, posinf=1.0, neginf=0.0), 0, 1)

@@ -173,55 +173,126 @@ def _glyph(ax, kind: str):
                     arrowprops=dict(arrowstyle="->", color=c2, lw=1.0))
 
 
+def _wrap(text: str, width_in: float, fontsize: float) -> list:
+    import textwrap
+    chars = max(20, int(width_in / (fontsize * 0.0072)))
+    return textwrap.wrap(text, chars) or [""]
+
+
 def fig_legend(outdir: Path) -> Path:
+    """Plate I, laid out by hand.
+
+    matplotlib's `wrap=True` measures against the *figure*, not the axes it is
+    drawn in, so contract text happily runs out through the side of its own
+    card. Everything here is therefore wrapped explicitly and the card heights
+    are derived from the resulting line counts, so no card can ever overflow
+    however long a contract clause gets.
+    """
     S.use_style()
     items = list(OPERATORS) + [NAIVE_RESIZE]
-    fig = plt.figure(figsize=(13.0, 10.6))
-    gs = GridSpec(4, 2, figure=fig, hspace=0.55, wspace=0.14,
-                  left=0.045, right=0.965, top=0.885, bottom=0.075)
 
-    for k, c in enumerate(items):
-        outer = gs[k // 2, k % 2]
-        sub = outer.subgridspec(1, 2, width_ratios=[1, 3.4], wspace=0.04)
-        ga = fig.add_subplot(sub[0])
-        _glyph(ga, "naive" if c.operator == "naive_resize" else c.operator)
+    FIG_W = 15.0
+    MARGIN, GAP = 0.5, 0.45
+    HEADER, FOOTER = 1.15, 0.85
+    ROW_GAP = 0.3
+    GLYPH_W, PAD = 1.0, 0.18
+    FS_T, FS_A, FS_K, FS_B, FS_C = 9.0, 7.2, 6.4, 6.9, 6.2
+    LH = 1.55 / 72.0                      # line height, inches per point
 
-        ax = fig.add_subplot(sub[1])
-        ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
-        for s in ax.spines.values():
-            s.set_visible(False)
-        is_naive = c.operator == "naive_resize"
-        ax.add_patch(Rectangle((0, 0), 1, 1, transform=ax.transAxes,
-                               facecolor="#f0e4e2" if is_naive else S.PAPER_DEEP,
-                               edgecolor=S.BAD if is_naive else S.RULE,
-                               lw=1.0, zorder=0))
-        ax.text(0.035, 0.9, S.smallcaps(c.operator.replace("_", " ")),
-                transform=ax.transAxes, fontsize=8.6, fontweight="bold",
-                color=S.BAD if is_naive else S.INK, va="top")
-        ax.text(0.035, 0.755, c.cartographic_analogue, transform=ax.transAxes,
-                fontsize=6.8, color=S.INK_2, va="top", style="italic",
-                wrap=True, ha="left")
-        y = 0.44
-        ax.text(0.035, y, "PRESERVES", transform=ax.transAxes, fontsize=6.2,
-                color=S.GOOD, fontweight="bold", va="top")
-        for line in c.preserves:
-            y -= 0.085
-            ax.text(0.035, y, "· " + line, transform=ax.transAxes, fontsize=6.3,
-                    color=S.INK, va="top", wrap=True)
-        y -= 0.12
-        ax.text(0.035, y, "SACRIFICES", transform=ax.transAxes, fontsize=6.2,
-                color=S.BAD, fontweight="bold", va="top")
-        for line in c.sacrifices:
-            y -= 0.085
-            ax.text(0.035, y, "· " + line, transform=ax.transAxes, fontsize=6.3,
-                    color=S.INK, va="top", wrap=True)
+    card_w = (FIG_W - 2 * MARGIN - GAP) / 2
+    text_w = card_w - GLYPH_W - 2 * PAD
+
+    # ---- wrap everything first, then size the cards from the line counts
+    blocks = []
+    for c in items:
+        b = {
+            "c": c,
+            "analogue": _wrap(c.cartographic_analogue, text_w, FS_A),
+            "preserves": [_wrap("· " + x, text_w, FS_B) for x in c.preserves],
+            "sacrifices": [_wrap("· " + x, text_w, FS_B) for x in c.sacrifices],
+            "invariant": _wrap("Invariant: " + c.invariant, text_w, FS_C),
+        }
+        h = PAD * 2
+        h += FS_T * LH * 1.9
+        h += len(b["analogue"]) * FS_A * LH + 0.10
+        h += FS_K * LH * 1.5
+        h += sum(len(w) for w in b["preserves"]) * FS_B * LH + 0.07
+        h += FS_K * LH * 1.5
+        h += sum(len(w) for w in b["sacrifices"]) * FS_B * LH + 0.10
+        h += len(b["invariant"]) * FS_C * LH
+        b["h"] = h
+        blocks.append(b)
+
+    n_rows = (len(blocks) + 1) // 2
+    row_h = [max(blocks[2 * r]["h"],
+                 blocks[2 * r + 1]["h"] if 2 * r + 1 < len(blocks) else 0)
+             for r in range(n_rows)]
+    FIG_H = HEADER + FOOTER + sum(row_h) + ROW_GAP * (n_rows - 1)
+
+    fig = plt.figure(figsize=(FIG_W, FIG_H))
+    y_cursor = FIG_H - HEADER
+
+    for r in range(n_rows):
+        h = row_h[r]
+        y_cursor -= h
+        for col in range(2):
+            k = 2 * r + col
+            if k >= len(blocks):
+                continue
+            b, c = blocks[k], blocks[2 * r + col]["c"]
+            x = MARGIN + col * (card_w + GAP)
+            is_naive = c.operator == "naive_resize"
+
+            ax = fig.add_axes([x / FIG_W, y_cursor / FIG_H,
+                               card_w / FIG_W, h / FIG_H])
+            ax.set_xlim(0, card_w); ax.set_ylim(0, h)
+            ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
+            for sp in ax.spines.values():
+                sp.set_visible(True)
+                sp.set_color(S.BAD if is_naive else S.RULE)
+                sp.set_linewidth(1.0)
+            ax.set_facecolor("#f2e5e3" if is_naive else S.PAPER_DEEP)
+
+            gax = fig.add_axes([(x + PAD) / FIG_W,
+                                (y_cursor + h / 2 - GLYPH_W / 2) / FIG_H,
+                                GLYPH_W * 0.86 / FIG_W, GLYPH_W * 0.86 / FIG_H])
+            gax.patch.set_alpha(0.0)
+            _glyph(gax, "naive" if is_naive else c.operator)
+
+            tx = GLYPH_W + PAD
+            ty = h - PAD
+
+            def put(lines, fs, color, weight="normal", style="normal", lead=1.0):
+                nonlocal ty
+                for ln in lines:
+                    ty -= fs * LH * lead
+                    ax.text(tx, ty, ln, fontsize=fs, color=color, va="baseline",
+                            ha="left", fontweight=weight, style=style)
+
+            put([S.smallcaps(c.operator.replace("_", " "))], FS_T,
+                S.BAD if is_naive else S.INK, weight="bold", lead=1.5)
+            ty -= 0.04
+            put(b["analogue"], FS_A, S.INK_2, style="italic")
+            ty -= 0.08
+            put(["PRESERVES"], FS_K, S.GOOD, weight="bold", lead=1.45)
+            for w in b["preserves"]:
+                put(w, FS_B, S.INK)
+            ty -= 0.06
+            put(["SACRIFICES"], FS_K, S.BAD, weight="bold", lead=1.45)
+            for w in b["sacrifices"]:
+                put(w, FS_B, S.INK)
+            ty -= 0.07
+            put(b["invariant"], FS_C, S.INK_3, style="italic")
+        y_cursor -= ROW_GAP
 
     S.sheet_title(fig, "The Legend",
-                  "Named generalization operators and their fidelity contracts. "
-                  "The final card is the baseline every MedMNIST-style benchmark ships without one.",
+                  "Named generalization operators and their fidelity contracts. The final "
+                  "card is the baseline every MedMNIST-style benchmark ships without one.",
                   plate="Plate I")
     S.caption(fig, "Vocabulary after Ratajski (1967), Brassel & Weibel (1988), "
-                   "McMaster & Shea (1992). Source-diagram practice after IHO S-4/S-57.")
+                   "McMaster & Shea (1992). Source-diagram practice after IHO S-4 / S-57. "
+                   "Every invariant named here is checked by tests/test_operators.py.",
+              y=0.020)
     S.neatline(fig)
     return S.save(fig, outdir / "fig01_legend.png")
 
@@ -234,9 +305,10 @@ def fig_three_regimes(outdir: Path, native: np.ndarray, naive: np.ndarray,
                       idx: Sequence[int], target: int = 28) -> Path:
     S.use_style()
     n = len(idx)
-    fig = plt.figure(figsize=(14.2, 2.55 * n + 1.9))
+    fig = plt.figure(figsize=(14.2, 2.55 * n + 2.5))
+    top = 1.0 - 1.55 / (2.55 * n + 2.5)
     gs = GridSpec(n, 5, figure=fig, hspace=0.16, wspace=0.06,
-                  left=0.035, right=0.975, top=0.885, bottom=0.075)
+                  left=0.062, right=0.975, top=top, bottom=0.085)
 
     heads = ["native 224²  (the survey)", "naive resize 28²", "generalized 28²  (base)",
              "generalized 28²  (symbols)", "source diagram"]
@@ -264,10 +336,6 @@ def fig_three_regimes(outdir: Path, native: np.ndarray, naive: np.ndarray,
         ax = fig.add_subplot(gs[r, 3])
         draw_symbol_plate(ax, gen[i], spec, 12, heads[3] if r == 0 else "",
                           subs[3] if r == 0 else "")
-        if r == 0:
-            S.legend_swatch(ax, [(k.replace("_", " "), v)
-                                 for k, v in S.STRUCTURE_COLOR.items()],
-                            loc=(0.02, 0.99), fontsize=6.2)
 
         ax = fig.add_subplot(gs[r, 4])
         cert_idx = [j for j in spec.groups["source_diagram"]
@@ -287,6 +355,8 @@ def fig_three_regimes(outdir: Path, native: np.ndarray, naive: np.ndarray,
                   "Column 1 is the source survey with the 28×28 cell boundaries drawn on it: "
                   "each benchmark pixel is ~0.71 mm of skin.",
                   plate="Plate II")
+    S.structure_key(fig, [(k.replace("_", " "), v)
+                          for k, v in S.STRUCTURE_COLOR.items()], y=top + 0.022)
     S.caption(fig, "Naive resize discards every structure whose period is below "
                    "2 benchmark pixels. Generalization measures those structures at native "
                    "resolution and draws them as symbols instead — then states, per cell, "
@@ -371,10 +441,10 @@ def fig_source_diagram(outdir: Path, native: np.ndarray, gen: np.ndarray, spec,
                        target: int = 28) -> Path:
     S.use_style()
     n = len(idx)
-    fig = plt.figure(figsize=(13.4, 3.05 * 2 + 3.5))
-    gs = GridSpec(3, n, figure=fig, hspace=0.22, wspace=0.07,
-                  left=0.04, right=0.975, top=0.88, bottom=0.06,
-                  height_ratios=[1, 1, 0.95])
+    fig = plt.figure(figsize=(13.4, 3.05 * 2 + 4.0))
+    gs = GridSpec(4, n, figure=fig, hspace=0.30, wspace=0.07,
+                  left=0.04, right=0.975, top=0.875, bottom=0.075,
+                  height_ratios=[1, 1, 0.10, 0.95])
     cert_idx = [j for j in spec.groups["source_diagram"]
                 if spec.names[j].endswith("::certificate")][0]
     cm = S.confidence_cmap()
@@ -397,14 +467,14 @@ def fig_source_diagram(outdir: Path, native: np.ndarray, gen: np.ndarray, spec,
         im = axb.imshow(np.kron(cert, np.ones((12, 12))), cmap=cm, vmin=0, vmax=1,
                         interpolation="nearest")
         axb.set_xticks([]); axb.set_yticks([]); axb.grid(False)
-        for s in axb.spines.values():
-            s.set_visible(True); s.set_color(S.INK); s.set_linewidth(1.0)
+        for sp in axb.spines.values():
+            sp.set_visible(True); sp.set_color(S.INK); sp.set_linewidth(1.0)
         axb.text(0.5, -0.05, f"mean confidence {cert.mean():.2f} · "
                              f"{100 * (cert < 0.5).mean():.0f}% below floor",
                  transform=axb.transAxes, ha="center", va="top", fontsize=7,
                  color=S.INK_2)
 
-    cax = fig.add_axes([0.30, 0.375, 0.4, 0.013])
+    cax = fig.add_subplot(gs[2, 1:max(2, n - 1)] if n > 2 else gs[2, :])
     cb = fig.colorbar(im, cax=cax, orientation="horizontal")
     cb.set_ticks([0.0, 0.5, 1.0])
     cb.set_ticklabels(["unsurveyed\n(symbol is extrapolation)", "at the floor",
@@ -412,7 +482,7 @@ def fig_source_diagram(outdir: Path, native: np.ndarray, gen: np.ndarray, spec,
     cb.ax.tick_params(labelsize=6.6, colors=S.INK_2, length=0)
     cb.outline.set_edgecolor(S.INK)
 
-    ax = fig.add_subplot(gs[2, :])
+    ax = fig.add_subplot(gs[3, :])
     ax.axis("off")
     rows = [(k, v["period_native_px"], v["target_cell_px"], v["nyquist_ratio"],
              v["survives_naive_resize"]) for k, v in nyquist.items()]
@@ -679,14 +749,28 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
                 zorder=4)
         S.direct_label(ax, rr[0], anchor_k * np.sqrt(rr[0] / anchor_r),
                        "Töpfer  n ∝ √r", "#2a78d6", dx=6, dy=-12)
+    rr = np.linspace(min(rs), max(rs), 100)
     if np.isfinite(law["alpha"]):
-        rr = np.linspace(min(rs), max(rs), 100)
         ax.plot(rr, np.exp(law["log_intercept"]) * rr ** law["alpha"],
                 color=S.INK, lw=1.2, ls=(0, (5, 3)), zorder=5)
         ax.text(0.03, 0.94, f"fitted  K* ∝ r^{law['alpha']:.2f}\n"
                             f"Töpfer predicts  r^0.50",
                 transform=ax.transAxes, fontsize=8, va="top", color=S.INK,
                 bbox=dict(facecolor=S.PAPER, edgecolor=S.RULE,
+                          boxstyle="square,pad=0.4"))
+    else:
+        # K* = 0 at too many resolutions for a log fit; say so on the plate
+        # rather than drawing nothing and letting the reader assume a null.
+        if np.isfinite(law.get("alpha_shifted", np.nan)):
+            ax.plot(rr, np.exp(law["log_intercept_shifted"])
+                    * rr ** law["alpha_shifted"] - 1.0,
+                    color=S.INK, lw=1.2, ls=(0, (5, 3)), zorder=5)
+        ax.text(0.03, 0.94, "unshifted power law undefined\n"
+                            f"(K* > 0 at only "
+                            f"{law.get('n_resolutions_with_positive_kstar', 0)} "
+                            "resolution(s))\nshifted fit on K*+1 shown dashed",
+                transform=ax.transAxes, fontsize=7.6, va="top", color=S.BAD,
+                bbox=dict(facecolor=S.PAPER, edgecolor=S.BAD,
                           boxstyle="square,pad=0.4"))
     ax.set_xlabel("benchmark grid resolution r (px)", fontsize=8.5)
     ax.set_ylabel("K*  — symbol budget", fontsize=8.5)
@@ -958,10 +1042,19 @@ def fig_headline(outdir: Path, evals: Dict[str, object], law: Dict,
     try:
         n_, g_, t_ = (float(getattr(evals[k], "rare_recall"))
                       for k in ("naive", "generalized", "native224"))
-        frac = (g_ - n_) / (t_ - n_) if abs(t_ - n_) > 1e-6 else float("nan")
-        stat(fig.add_subplot(gs[0, 0]), f"{frac:.0%}",
-             "of the rare-class gap that 224² buys,\nrecovered at 28² by generalization",
-             f"naive {n_:.3f} → gen {g_:.3f} → 224 {t_:.3f}", "#eb6834")
+        trail = f"naive {n_:.3f} → gen {g_:.3f} → 224 {t_:.3f}"
+        if abs(t_ - n_) > 1e-6 and np.isfinite([n_, g_, t_]).all():
+            frac = (g_ - n_) / (t_ - n_)
+            stat(fig.add_subplot(gs[0, 0]), f"{frac:.0%}",
+                 "of the rare-class gap that 224² buys,\n"
+                 "recovered at 28² by generalization", trail, "#eb6834")
+        else:
+            # 224 bought nothing over naive, so there is no gap to recover a
+            # fraction of. Saying so is the honest reading; printing "nan%" or
+            # silently dividing by ~0 is not.
+            stat(fig.add_subplot(gs[0, 0]), "no gap",
+                 "224² bought no rare-class recall over naive 28²,\n"
+                 "so the recovery fraction is undefined", trail, S.INK_2)
     except Exception:                                   # noqa: BLE001
         stat(fig.add_subplot(gs[0, 0]), "—", "rare-class gap recovery")
 
