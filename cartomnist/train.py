@@ -9,20 +9,27 @@ degrade to noise. `EquivariantAug` handles this; `test_train.py` asserts it.
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
 from .models import build, count_params
 
 
 def pick_device(pref: str = "auto") -> torch.device:
+    """`pref="auto"` prefers CUDA, then MPS, then CPU.
+
+    Confirmed by direct test (two seed=0 runs on identical cached tensors):
+    training is bit-identical run-to-run on CPU, but NOT on MPS — Apple's
+    backend does not give the same determinism guarantees CUDA does even with
+    a fixed seed. cudnn.deterministic (set in train_eval) addresses CUDA;
+    nothing here can fix MPS. For a reproducibility-sensitive local run
+    (rather than a real GPU run), pass device="cpu" explicitly.
+    """
     if pref != "auto":
         return torch.device(pref)
     if torch.cuda.is_available():
@@ -168,6 +175,13 @@ def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
+    # cudnn.deterministic (not the stricter use_deterministic_algorithms,
+    # which raises on any op lacking a deterministic CUDA kernel and can't be
+    # verified without a CUDA device) — pins convolution algorithm selection
+    # so seed=0 means the same run twice on the same GPU, not just the same
+    # data. A no-op off CUDA.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     device = pick_device(cfg.device)
     native = regime == "native224"
     epochs = epochs or (cfg.epochs_native if native else cfg.epochs_small)
@@ -202,6 +216,14 @@ def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
     use_amp = cfg.amp and device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
+    # Gradient norm clipping: confirmed necessary, not precautionary. With a
+    # fixed seed and fixed data, the `generalized` regime's 18-channel stem
+    # converges cleanly for most seeds but some land in a bad early
+    # trajectory and never recover, regardless of epoch budget (seed=2 was
+    # still stuck at 25 epochs after 18 was already raised for this same
+    # reason — see apply_fast's docstring). Clipping is the standard remedy
+    # for exactly this failure mode: an early large gradient step throwing
+    # training into a region OneCycleLR's schedule can't anneal out of.
     history: List[Dict[str, float]] = []
     for ep in range(epochs):
         model.train()
@@ -214,6 +236,8 @@ def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
                                 enabled=use_amp):
                 loss = crit(model(xb), yb)
             scaler.scale(loss).backward()
+            scaler.unscale_(opt)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(opt)
             scaler.update()
             sched.step()
@@ -224,6 +248,16 @@ def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
         if verbose and (ep == epochs - 1 or ep % max(1, epochs // 4) == 0):
             print(f"    [{regime}|seed{seed}] epoch {ep+1}/{epochs} "
                   f"loss {history[-1]['loss']:.4f}")
+
+    start_loss = history[0]["loss"]
+    best_loss = min(h["loss"] for h in history)
+    if start_loss > 1e-8 and (start_loss - best_loss) / start_loss < 0.10:
+        print(f"    [WARNING] [{regime}|seed{seed}] training loss barely moved "
+              f"({start_loss:.4f} -> best {best_loss:.4f}, "
+              f"{100 * (start_loss - best_loss) / start_loss:.1f}% improvement). "
+              f"This regime may not have converged — the epoch budget may be too "
+              f"small for this input's channel count at this learning rate. Do not "
+              f"trust downstream metrics for this run without investigating.")
 
     vlog, vy = _infer(model, dl_va, device, use_amp)
     tlog, ty = _infer(model, dl_te, device, use_amp)
