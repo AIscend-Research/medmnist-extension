@@ -59,7 +59,6 @@ def make_image(cls: int, pigment: float, rng: np.random.Generator) -> np.ndarray
     theta0 = [0, 0, 0, 0, np.pi / 4, 0, 0][cls]
     for k in range(n_streaks):
         th = theta0 + rng.normal(0, 0.25)
-        t = np.linspace(-0.26, 0.26, 2)
         cx, cy = .5, .5
         d = ((xx - cx) * np.sin(th) - (yy - cy) * np.cos(th)) ** 2
         along = ((xx - cx) * np.cos(th) + (yy - cy) * np.sin(th))
@@ -96,7 +95,13 @@ def main() -> int:
     cfg.paths.mkdirs()
     cfg.apply_fast()
     cfg.max_train = cfg.max_val = cfg.max_test = 0
-    cfg.epochs_small, cfg.epochs_native = 6, 2
+    # epochs_small=10, not 6: gradient clipping (added to train_eval after a
+    # real-data seed was confirmed stuck in a bad trajectory regardless of
+    # epoch budget) trades occasional large-but-lucky steps for consistently
+    # smaller, safer ones. That is a net win on real data, but it means this
+    # synthetic task's very easy, strong signal no longer converges within
+    # 6 epochs the way it did when a large early step could get lucky.
+    cfg.epochs_small, cfg.epochs_native = 10, 2
     cfg.batch_size, cfg.batch_size_native = 64, 32
     cfg.seeds = [0]
     cfg.topfer_resolutions = [7, 14, 28]
