@@ -7,17 +7,17 @@ and a bar chart cannot make that argument.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.gridspec import GridSpec
-from matplotlib.patches import Circle, FancyArrow, Polygon, Rectangle
+from matplotlib.patches import Circle, Polygon, Rectangle
 
 from . import style as S
 from .contracts import OPERATORS, NAIVE_RESIZE
 from .data import CLASS_SHORT
-from .filterbanks import STRUCTURES, STRUCTURE_NAMES, scale_periods
+from .filterbanks import STRUCTURE_NAMES, scale_periods
 
 
 # ==========================================================================
@@ -409,7 +409,6 @@ def fig_symbol_atlas(outdir: Path, native_img: np.ndarray, tensor: np.ndarray,
         axb.set_xticks([]); axb.set_yticks([]); axb.grid(False)
         for s in axb.spines.values():
             s.set_visible(True); s.set_color(S.INK); s.set_linewidth(1.0)
-        cell_mm = S.FIELD_MM / target
         nyq = periods[sname] / (2 * img.shape[0] / target)
         verdict = "survives resize" if nyq >= 1 else "sub-Nyquist — symbolized"
         axb.text(0.5, -0.05, f"{verdict}\n(p/2Δ = {nyq:.2f})", transform=axb.transAxes,
@@ -559,7 +558,7 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
             j = int(np.flatnonzero(np.isfinite(vals))[-1])
             S.direct_label(ax, x[j], vals[j], rlabel[r], rcolor[r])
     ax.set_xticks(x)
-    ax.set_xticklabels([l.replace(" (", "\n(") for l in labs], fontsize=7.4)
+    ax.set_xticklabels([lab.replace(" (", "\n(") for lab in labs], fontsize=7.4)
     ax.set_ylabel("structure retention  (R² of native map)", fontsize=8.5)
     ax.set_xlabel("individual typology angle — darker skin ← → lighter skin", fontsize=8.5)
     ax.set_title("A · How much of the native structure survives, by pigmentation",
@@ -722,7 +721,7 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
     ax.set_ylabel("test macro AUC", fontsize=8.5)
     ax.set_title("A · Diminishing returns at each scale", loc="left", fontsize=9.8)
     ax.set_xlim(-0.3, max(max(c["k"]) for c in curves.values()) + 1.3)
-    ax.text(0.02, 0.04, "★ = K*, first K within "
+    ax.text(0.02, 0.04, "star marks K*, first K within "
                         f"{law['frac_of_max']:.0%} of the best AUC at that scale",
             transform=ax.transAxes, fontsize=7, color=S.INK_2)
 

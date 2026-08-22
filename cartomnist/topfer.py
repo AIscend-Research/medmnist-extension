@@ -60,11 +60,12 @@ def structure_importance(x: np.ndarray, y: np.ndarray, spec,
             xa, xb, ya, yb = train_test_split(f, y, test_size=0.33,
                                               random_state=seed, stratify=y)
             sc = StandardScaler().fit(xa)
-            clf = LogisticRegression(max_iter=400, C=1.0, multi_class="auto")
+            clf = LogisticRegression(max_iter=400, C=1.0)
             clf.fit(sc.transform(xa), ya)
             p = clf.predict_proba(sc.transform(xb))
             out[s] = float(macro_auc(p, yb))
-        except Exception:                              # noqa: BLE001
+        except Exception as exc:                       # noqa: BLE001
+            print(f"  [WARN] structure_importance probe failed for {s!r}: {exc}")
             out[s] = 0.0
     return out
 

@@ -35,7 +35,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -100,7 +100,6 @@ def validate(target: int = 28, native: int = 224, limit: int = 300,
     from sklearn.metrics import roc_auc_score
 
     from .generalize import channel_spec, generalize
-    from .filterbanks import STRUCTURE_NAMES
 
     spec = channel_spec()
     ids = list_cases(root, limit)

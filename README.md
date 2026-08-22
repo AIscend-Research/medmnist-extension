@@ -44,8 +44,13 @@ benchmark didn't need to be bigger. It needed a legend.
 ### Kaggle (the intended path)
 
 Open [`notebooks/kaggle_cartomnist.ipynb`](notebooks/kaggle_cartomnist.ipynb),
-attach a GPU, run all. `FAST = True` fits the whole thing in ~25–40 GPU-minutes;
-`FAST = False` runs full data with three seeds.
+attach a GPU, run all. `FAST = True` fits the whole thing in roughly
+~30–50 GPU-minutes (epoch budgets were raised from an earlier, faster-but-
+unreliable setting — see `Config.apply_fast`'s docstring; a single-seed local
+CPU run took ~48 minutes end to end, and a real GPU should meaningfully
+speed up the ResNet-18 stage specifically — treat this range as provisional
+until confirmed on an actual GPU run); `FAST = False` runs full data with
+three seeds.
 
 The notebook ends by handing you `cartomnist_report.zip` — a standalone HTML
 report, twelve plates, and every results table as CSV and JSON. Cached tensors
@@ -60,7 +65,7 @@ set `MEDMNIST_INPUT` / `ISIC_INPUT` in the settings cell.
 
 ```bash
 pip install -e ".[torch,data,dev]"
-python -m pytest tests/ -q          # 23 invariant + equivariance tests
+python -m pytest tests/ -q          # 24 invariant + equivariance tests
 python scripts/smoke_test.py        # full pipeline on synthetic data, CPU, no download
 python scripts/run_all.py --fast    # the real thing
 ```

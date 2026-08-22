@@ -99,8 +99,8 @@ def run_all(cfg: Optional[Config] = None,
     bin_idx, bin_labels = ITA.make_bins(ita["test"], cfg.ita_bins)
     out["ita_summary"] = ITA.summary(ita["test"])
     out["ita_bins"] = list(bin_labels)
-    out["ita_bin_counts"] = {l: int((bin_idx == b).sum())
-                             for b, l in enumerate(bin_labels)}
+    out["ita_bin_counts"] = {lab: int((bin_idx == b).sum())
+                             for b, lab in enumerate(bin_labels)}
     T.mark(f"ITA computed; strata = {bin_labels}")
 
     # =================================================== classification arms
