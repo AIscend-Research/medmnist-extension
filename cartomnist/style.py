@@ -16,12 +16,12 @@ Two deliberate choices:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Sequence
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import FancyBboxPatch, Rectangle
+from matplotlib.patches import Rectangle
 
 # --------------------------------------------------------------------------
 # Palette
