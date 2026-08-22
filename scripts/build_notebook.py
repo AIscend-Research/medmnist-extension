@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-REPO = "https://github.com/christopherh-88/medmnist-extension.git"
+REPO = "https://github.com/AIscend-Research/medmnist-extension.git"
 
 
 def md(src: str) -> dict:
