@@ -2,9 +2,17 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+*.egg-info/
 carto_cache/
 carto_out/
 smoke_out/
+scratch/
+# Cell 8 of the notebook saves this directly into cwd on a local (non-Kaggle)
+# run, since Path(".") there resolves to wherever the notebook is executed.
+notebooks/fig*.png
+# Convention for a local nbconvert --execute validation copy, not the
+# committed notebook itself.
+notebooks/*_EXECUTED.ipynb
 *.npy
 *.npz
 *.zip
