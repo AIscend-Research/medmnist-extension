@@ -23,6 +23,7 @@ hard-coded — so it is stated explicitly and cited.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
@@ -30,6 +31,23 @@ import numpy as np
 from scipy import ndimage as ndi
 from skimage.color import rgb2lab
 from skimage.filters import gabor_kernel, sato
+
+
+def _stable_seed(key) -> int:
+    """A reproducible-across-process seed from a key's contents.
+
+    Python's builtin hash() is randomised per interpreter process for str/
+    tuple-of-str (PEP 456, PYTHONHASHSEED) unless explicitly pinned. Using it
+    to seed noise_ceiling's calibration RNG meant the equal-fidelity noise
+    floor for every structure — and therefore every symbol channel's value —
+    was silently different on every separate invocation of the same code
+    with the same data and the same config seed, which directly contradicts
+    SYMBOLIZATION's documented invariant that a symbol channel is a
+    deterministic function of the native image alone. hashlib is process-
+    independent by construction, so this is not.
+    """
+    digest = hashlib.sha256(repr(key).encode()).digest()
+    return int.from_bytes(digest[:4], "big") % (2 ** 31)
 
 # --------------------------------------------------------------------------
 # Structure specification
@@ -238,7 +256,7 @@ def noise_ceiling(name: str, period: float, sigma: float, size: int = 128) -> fl
     key = (name, round(float(period), 2), sq, size)
     if key in _NOISE_CACHE:
         return _NOISE_CACHE[key]
-    rng = np.random.default_rng(abs(hash(key)) % (2 ** 31))
+    rng = np.random.default_rng(_stable_seed(key))
     lab = np.empty((size, size, 3), dtype=np.float32)
     lab[..., 0] = 60.0 + 100.0 * sq * rng.standard_normal((size, size))
     lab[..., 1] = 80.0 * sq * rng.standard_normal((size, size))
