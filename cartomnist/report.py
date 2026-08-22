@@ -233,8 +233,8 @@ def write_html(out: Dict, figures_dir: Path, path: Path) -> Path:
     ]
     tile_html = "".join(
         f'<div class="tile"><div class="v" style="color:var(--{c})">{v}</div>'
-        f'<div class="l">{l}</div><div class="s">{s}</div></div>'
-        for v, l, s, c in tiles)
+        f'<div class="l">{lab}</div><div class="s">{s}</div></div>'
+        for v, lab, s, c in tiles)
 
     # legend cards
     cards = []
@@ -247,7 +247,7 @@ def write_html(out: Dict, figures_dir: Path, path: Path) -> Path:
                 f'<div class="an">{c["cartographic_analogue"]}</div>'
                 f'<div class="k p">Preserves</div><ul>'
                 + "".join(f"<li>{x}</li>" for x in c["preserves"]) + "</ul>"
-                f'<div class="k s">Sacrifices</div><ul>'
+                '<div class="k s">Sacrifices</div><ul>'
                 + "".join(f"<li>{x}</li>" for x in c["sacrifices"]) + "</ul>"
                 f'<div class="cite">Invariant: {c["invariant"]}<br>{c["citation"]}</div>'
                 "</div>")
@@ -265,6 +265,10 @@ def write_html(out: Dict, figures_dir: Path, path: Path) -> Path:
     ab_rows = [[k, v.get("macro_auc"), v.get("rare_recall"),
                 v.get("balanced_accuracy"), v.get("ece")]
                for k, v in out["ablations"].items()]
+
+    merc_rows = [[m["regime"], m["structure"], m["spread"],
+                  m["slope_per_10deg"], m["slope_p"]]
+                 for m in out["mercator"]["per_structure"]]
 
     figs = sorted(figures_dir.glob("fig*.png"))
     fig_captions = {
@@ -325,11 +329,24 @@ falls below 2Δ is below the Nyquist limit of the target grid: no resampling ker
 quality setting, can represent it. Symbolization does not beat the sampling theorem — it
 moves the measurement upstream of the reduction, which is a different thing entirely.</p>
 
-<h2>3 · The legend</h2>
+<h2>3 · The Mercator result — is the resizing policy neutral?</h2>
+<p class="lede">Retention is measured without a classifier: a ridge probe fitted on train
+reconstructs each structure's native density map from what a regime kept, scored per test
+image, stratified by individual typology angle (ITA). Spread is the max − min retention
+across ITA strata for that structure and regime; the slope and its permutation p-value ask
+whether retention trends with ITA at all.</p>
+{_table(["regime", "structure", "spread across ITA strata", "slope (Δ retention / 10° ITA)",
+         "permutation p"], merc_rows)}
+<p class="cite">naive is expected to show a negative, significant slope (retention falls with
+decreasing ITA — the Mercator distortion); generalized (equal fidelity) is expected to be flat
+by construction; generalized (absolute scale) is expected to recover the distortion, showing
+equal fidelity is a design choice inside the framework and not automatic.</p>
+
+<h2>4 · The legend</h2>
 <p class="lede">Every operator that touches the pixels, and what it admits to destroying.</p>
 {''.join(cards)}
 
-<h2>4 · Ablations, including the one that could sink this</h2>
+<h2>5 · Ablations, including the one that could sink this</h2>
 {_table(["ablation", "macro AUC", "rare recall", "bal. acc", "ECE"], ab_rows)}
 <div class="caveat"><strong>Shortcut test.</strong> Shuffling the symbol channels across
 test images breaks their alignment with the underlying picture. Macro AUC falls by
@@ -338,10 +355,10 @@ as a per-image fingerprint rather than as measurement, and the entire result wou
 artefact.</div>
 <div class="caveat"><strong>Filter-bank validity.</strong> {isic_note}</div>
 
-<h2>5 · Plates</h2>
+<h2>6 · Plates</h2>
 {fig_html}
 
-<h2>6 · What this proposes</h2>
+<h2>7 · What this proposes</h2>
 <p>A medical imaging benchmark should ship:</p>
 <ol>
 <li><strong>Named generalization operators with fidelity contracts</strong> — what was
