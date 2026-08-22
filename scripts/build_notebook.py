@@ -73,9 +73,12 @@ round-trip, not a different crop.
 ---
 ## 1 · Settings
 
-`FAST = True` fits the whole run in roughly 25–40 GPU-minutes. Set it to `False`
-for the full-data run (a few hours). Everything else is left at defaults that
-are recorded verbatim into `results/config.json`.
+`FAST = True` fits the whole run in roughly 30–50 GPU-minutes (a range that's
+provisional until confirmed on an actual GPU run — a single-seed local CPU
+run took ~48 minutes end to end; the epoch budgets behind it were raised for
+reliability, see `Config.apply_fast`). Set it to `False` for the full-data
+run (a few hours). Everything else is left at defaults that are recorded
+verbatim into `results/config.json`.
 """),
 
     code(r"""
@@ -132,7 +135,7 @@ def _bootstrap():
     raise RuntimeError("could not locate the cartomnist package")
 
 _sh(sys.executable, "-m", "pip", "install", "-q",
-    "scikit-image>=0.21", "medmnist>=3.0")
+    "scikit-image==0.26.0", "medmnist==3.0.2")
 print("bootstrap:", _bootstrap())
 
 import cartomnist
@@ -142,8 +145,11 @@ if MEDMNIST_INPUT: os.environ["CARTO_DATA_DIR"] = MEDMNIST_INPUT
 if ISIC_INPUT:     os.environ["CARTO_ISIC_DIR"] = ISIC_INPUT
 
 import torch
-print("torch", torch.__version__, "| cuda:", torch.cuda.is_available(),
-      "|", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu")
+has_mps = getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
+device_name = ("cuda: " + torch.cuda.get_device_name(0) if torch.cuda.is_available()
+               else "mps" if has_mps else "cpu")
+print("torch", torch.__version__, "| device that Config(device=\\"auto\\") will pick:",
+      device_name)
 """ % REPO),
 
     md(r"""
@@ -256,11 +262,18 @@ for k, e in out["evaluations"].items():
     })
 display(pd.DataFrame(rows).set_index("regime").round(4))
 
+import math
+
 gr = out.get("gap_recovery", {})
 f = gr.get("fraction_of_224_gap_recovered_at_28", float("nan"))
 print(f"\nGeneralized 28² recovers {f:.1%} of the rare-class recall gap that 224² recovers.")
-print(f"Töpfer scale law: measured K* ∝ r^{out['topfer']['law']['alpha']:.3f} "
-      f"(radical law predicts r^0.50)")
+
+law = out["topfer"]["law"]
+if math.isnan(law["alpha"]):
+    print(f"Töpfer scale law: undefined this run — {law['diagnostic']}")
+else:
+    print(f"Töpfer scale law: measured K* ∝ r^{law['alpha']:.3f} "
+          f"(radical law predicts r^0.50)")
 for r, s in out["mercator"]["summary"].items():
     print(f"Mercator · {r:<18} retention spread across ITA strata = {s['mean_spread']:.4f}")
 full = out["ablations"]["generalized (full)"]["macro_auc"]
@@ -374,12 +387,19 @@ precisely a decision about whose features survive.
 
 
 def main() -> None:
+    # Deterministic, positional cell ids (not random) so regenerating the
+    # notebook produces byte-identical output — the whole point of keeping
+    # this as a generator. nbformat's validator already warns that a missing
+    # id "will become a hard error in future nbformat versions".
+    for i, cell in enumerate(CELLS):
+        cell["id"] = f"cell-{i:02d}"
+
     nb = {
         "cells": CELLS,
         "metadata": {
             "kernelspec": {"display_name": "Python 3", "language": "python",
                            "name": "python3"},
-            "language_info": {"name": "python", "version": "3.11"},
+            "language_info": {"name": "python", "version": "3.12"},
             "accelerator": "GPU",
         },
         "nbformat": 4, "nbformat_minor": 5,

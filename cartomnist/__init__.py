@@ -12,6 +12,7 @@ source diagram — an inset showing where the survey is too sparse to trust —
 since the nineteenth century. This package implements that discipline for
 DermaMNIST and ships the audit.
 """
+from .baselines import naive_resize_interp, naive_resize_interp_batch
 from .config import CFG, Config, Paths
 from .contracts import OPERATORS, NAIVE_RESIZE, legend_dict
 from .generalize import (channel_spec, generalize, generalize_batch,
@@ -24,7 +25,8 @@ __all__ = [
     "CFG", "Config", "Paths",
     "OPERATORS", "NAIVE_RESIZE", "legend_dict",
     "channel_spec", "generalize", "generalize_batch", "generalize_multi",
-    "naive_resize", "source_diagram", "nyquist_table",
+    "naive_resize", "naive_resize_interp", "naive_resize_interp_batch",
+    "source_diagram", "nyquist_table",
     "run_all",
 ]
 

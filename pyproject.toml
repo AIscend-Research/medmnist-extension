@@ -7,22 +7,26 @@ name = "cartomnist"
 version = "0.1.0"
 description = "Cartographic generalization for low-resolution medical imaging benchmarks"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = {text = "MIT"}
+# Exact pins, not >=: an open lower bound on scikit-learn once let a removed
+# constructor argument (LogisticRegression's multi_class="auto") pass CI
+# silently and corrupt a downstream ranking. Versions below are the ones the
+# full test suite and scripts/smoke_test.py are verified against.
 dependencies = [
-  "numpy>=1.24",
-  "scipy>=1.10",
-  "scikit-image>=0.21",
-  "scikit-learn>=1.3",
-  "matplotlib>=3.7",
-  "pillow>=9.5",
-  "joblib>=1.3",
+  "numpy==2.5.2",
+  "scipy==1.18.1",
+  "scikit-image==0.26.0",
+  "scikit-learn==1.9.0",
+  "matplotlib==3.11.1",
+  "pillow==12.3.0",
+  "joblib==1.5.3",
 ]
 
 [project.optional-dependencies]
-torch = ["torch>=2.0", "torchvision>=0.15"]
-data = ["medmnist>=3.0"]
-dev = ["pytest>=7.4"]
+torch = ["torch==2.13.0", "torchvision==0.28.0"]
+data = ["medmnist==3.0.2"]
+dev = ["pytest==9.1.1", "ruff==0.14.4"]
 
 [tool.setuptools.packages.find]
 include = ["cartomnist*"]
@@ -30,3 +34,10 @@ include = ["cartomnist*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore::UserWarning"]
+
+[tool.ruff.lint]
+# Correctness rules only: unused imports/variables, undefined names, ambiguous
+# single-letter identifiers. Deliberately excludes pycodestyle style rules
+# (e.g. E702) — the plotting code's semicolon-joined axis setup is a
+# consistent, intentional style, not a defect.
+select = ["F", "E741"]

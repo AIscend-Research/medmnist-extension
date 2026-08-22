@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from cartomnist import operators as ops
 from cartomnist.generalize import channel_spec, generalize, generalize_multi
