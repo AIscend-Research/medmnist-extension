@@ -114,6 +114,7 @@ class Config:
     # ---- calibration / abstention
     n_reliability_bins: int = 15
     temperature_scale: bool = True
+    mc_dropout_samples: int = 20     # 0 disables the MC-dropout abstention signal
 
     # ---- ITA stratification
     ita_bins: str = "fitzpatrick"   # "fitzpatrick" | "tertile"

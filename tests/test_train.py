@@ -128,6 +128,54 @@ def test_class_weights_favour_rare_classes():
     assert w[1] > w[0]
 
 
+def test_mc_dropout_infer_varies_across_passes():
+    from torch.utils.data import DataLoader, TensorDataset
+
+    from cartomnist.models import SmallCNN
+    from cartomnist.train import mc_dropout_infer
+
+    torch.manual_seed(0)
+    m = SmallCNN(3, 4, width=8, p_drop=0.5)
+    x = torch.rand(16, 3, 8, 8)
+    y = torch.zeros(16, dtype=torch.long)
+    loader = DataLoader(TensorDataset(x, y), batch_size=8)
+    probs = mc_dropout_infer(m, loader, torch.device("cpu"), T=10, amp=False)
+    assert probs.shape == (10, 16, 4)
+    assert np.allclose(probs.sum(axis=-1), 1.0, atol=1e-4)
+    # dropout must actually be active during sampling, or every pass would be
+    # identical and the whole point of the signal would be vacuous.
+    assert probs.var(axis=0).sum() > 0
+
+
+def test_train_eval_mc_dropout_is_opt_in():
+    from cartomnist.config import Config
+    from cartomnist.train import train_eval
+
+    rng = np.random.default_rng(0)
+    x_tr = rng.random((12, 3, 8, 8)).astype(np.float32)
+    y_tr = rng.integers(0, 3, 12)
+    x_va = rng.random((6, 3, 8, 8)).astype(np.float32)
+    y_va = rng.integers(0, 3, 6)
+    x_te = rng.random((6, 3, 8, 8)).astype(np.float32)
+    y_te = rng.integers(0, 3, 6)
+
+    cfg = Config()
+    cfg.epochs_small = 1
+    cfg.batch_size = 4
+    cfg.amp = False
+
+    default_result = train_eval(x_tr, y_tr, x_va, y_va, x_te, y_te,
+                                regime="naive", n_classes=3, cfg=cfg, seed=0,
+                                verbose=False)
+    assert default_result.mc_dropout_probs is None
+
+    mc_result = train_eval(x_tr, y_tr, x_va, y_va, x_te, y_te,
+                           regime="naive", n_classes=3, cfg=cfg, seed=0,
+                           verbose=False, mc_dropout_samples=5)
+    assert mc_result.mc_dropout_probs is not None
+    assert mc_result.mc_dropout_probs.shape == (5, 6, 3)
+
+
 def test_temperature_scaling_reduces_nll_on_overconfident_logits():
     from cartomnist.metrics import fit_temperature, reliability, softmax
     rng = np.random.default_rng(0)
