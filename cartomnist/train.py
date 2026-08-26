@@ -136,6 +136,7 @@ class TrainResult:
     n_params: int
     epochs: int
     history: List[Dict[str, float]]
+    mc_dropout_probs: Optional[np.ndarray] = None      # (T, N, C), opt-in only
 
 
 def _class_weights(y: np.ndarray, n_classes: int) -> torch.Tensor:
@@ -160,18 +161,55 @@ def _infer(model, loader, device, amp: bool) -> Tuple[np.ndarray, np.ndarray]:
     return np.concatenate(outs), np.concatenate(ys)
 
 
+def _enable_dropout(model: nn.Module) -> None:
+    """Put only `nn.Dropout` layers back in train mode, leaving GroupNorm/
+    BatchNorm/everything else in eval mode -- the standard MC-dropout trick
+    for sampling from an already-trained model (Gal & Ghahramani, 2016)."""
+    for m in model.modules():
+        if isinstance(m, nn.Dropout):
+            m.train()
+
+
+@torch.no_grad()
+def mc_dropout_infer(model, loader, device, T: int, amp: bool) -> np.ndarray:
+    """T stochastic forward passes with dropout active. Returns (T, N, C)
+    softmax probabilities -- probability space, not logits, for the same
+    reason `average_logits` averages probabilities: dropout sharpens or
+    flattens confidence per pass, and only probabilities average sensibly."""
+    model.eval()
+    _enable_dropout(model)
+    dtype = torch.float16 if (amp and device.type == "cuda") else torch.float32
+    passes = []
+    for _ in range(T):
+        outs = []
+        for xb, _yb in loader:
+            xb = xb.to(device, non_blocking=True)
+            with torch.autocast(device_type=device.type, dtype=dtype,
+                                enabled=(amp and device.type == "cuda")):
+                out = model(xb)
+            outs.append(torch.softmax(out.float(), dim=1).cpu().numpy())
+        passes.append(np.concatenate(outs))
+    return np.stack(passes)
+
+
 def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
                regime: str, n_classes: int, cfg,
                channels: Optional[Sequence[int]] = None,
                aug: Optional[EquivariantAug] = None,
                test_zero_channels: Optional[Sequence[int]] = None,
                seed: int = 0, epochs: Optional[int] = None,
-               verbose: bool = True) -> TrainResult:
+               verbose: bool = True, mc_dropout_samples: int = 0) -> TrainResult:
     """Train one model and return logits on val and test.
 
     `test_zero_channels` ablates channels at *test time only* — the experiment
     that checks whether the model learned the symbols as a shortcut rather than
     as evidence.
+
+    `mc_dropout_samples` is opt-in and 0 by default: every existing caller
+    (ablations, the shortcut test, every other regime) stays exactly as
+    expensive as before. Set it > 0 only for the one call that needs the
+    MC-dropout uncertainty signal, since it costs `mc_dropout_samples` extra
+    passes over the test set.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -183,7 +221,10 @@ def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     device = pick_device(cfg.device)
-    native = regime == "native224"
+    # Any regime that consumes full native-resolution images needs the
+    # native-size batch/lr/epoch budget, not the small-CNN one, regardless of
+    # what its own classifier head looks like downstream of the input.
+    native = regime in ("native224", "learned_pool_linear", "learned_pool_attention")
     epochs = epochs or (cfg.epochs_native if native else cfg.epochs_small)
     bs = cfg.batch_size_native if native else cfg.batch_size
     lr = cfg.lr_native if native else cfg.lr
@@ -204,7 +245,8 @@ def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
     dl_te = DataLoader(ds_te, batch_size=bs * 2, num_workers=nw)
 
     model = build(regime, in_ch, n_classes,
-                  pretrained=getattr(cfg, "pretrained_224", False)).to(device)
+                  pretrained=getattr(cfg, "pretrained_224", False),
+                  factor=cfg.native_size // cfg.target_size).to(device)
     crit = nn.CrossEntropyLoss(
         weight=_class_weights(np.asarray(train_y), n_classes).to(device)
         if cfg.class_weighted_loss else None,
@@ -261,11 +303,13 @@ def train_eval(train_x, train_y, val_x, val_y, test_x, test_y, *,
 
     vlog, vy = _infer(model, dl_va, device, use_amp)
     tlog, ty = _infer(model, dl_te, device, use_amp)
+    mc_probs = (mc_dropout_infer(model, dl_te, device, mc_dropout_samples, use_amp)
+                if mc_dropout_samples > 0 else None)
     n_params = count_params(model)
     del model
     if device.type == "cuda":
         torch.cuda.empty_cache()
-    return TrainResult(vlog, tlog, vy, ty, n_params, epochs, history)
+    return TrainResult(vlog, tlog, vy, ty, n_params, epochs, history, mc_probs)
 
 
 def train_eval_seeds(*args, seeds: Sequence[int] = (0,), **kw) -> List[TrainResult]:

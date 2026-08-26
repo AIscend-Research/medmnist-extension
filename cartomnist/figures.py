@@ -795,15 +795,24 @@ def fig_certificate(outdir: Path, curves: Dict[str, Dict]) -> Path:
     gs = GridSpec(1, 2, figure=fig, wspace=0.24, left=0.07, right=0.975,
                   top=0.80, bottom=0.14)
     colors = {"source certificate": "#eb6834", "softmax confidence": "#2a78d6",
-              "random": S.INK_3}
+              "deep ensemble disagreement": "#1baf7a",
+              "MC-dropout uncertainty": "#9b59b6", "random": S.INK_3}
 
     ax = fig.add_subplot(gs[0])
     for name, c in curves.items():
         col = colors.get(name, S.INK)
         ax.plot(c["coverage"], c["balanced_risk"], lw=2.0, color=col,
                 ls=(0, (4, 3)) if name == "random" else "-")
+
+    # Labels are stacked vertically by their value at the leftmost coverage
+    # point rather than each pinned independently: once more than two or
+    # three trust signals are compared, several curves start near the same
+    # risk and independent labels overlap into an unreadable smear.
+    ranked = sorted(curves.items(), key=lambda kv: -kv[1]["balanced_risk"][0])
+    for rank, (name, c) in enumerate(ranked):
+        col = colors.get(name, S.INK)
         S.direct_label(ax, c["coverage"][0], c["balanced_risk"][0], name, col,
-                       dx=4, dy=8, fontsize=7.6)
+                       dx=4, dy=14 - 13 * rank, fontsize=7.2)
     ax.set_xlabel("coverage — fraction of the test set kept", fontsize=8.5)
     ax.set_ylabel("balanced risk on the kept fraction", fontsize=8.5)
     ax.set_title("A · Coverage–risk", loc="left", fontsize=9.8)
