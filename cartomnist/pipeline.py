@@ -28,6 +28,8 @@ from .data import CLASS_SHORT, DermaSource, cached
 from .filterbanks import STRUCTURE_NAMES, estimate_absolute_scales
 from .generalize import (channel_spec, generalize, generalize_batch,
                          generalize_multi_batch, raw_structure_maps_batch)
+from . import pansharpen as PS
+from . import superres as SR
 from .sufficiency import nyquist_table
 from .train import EquivariantAug, average_logits, train_eval
 
@@ -90,6 +92,33 @@ def run_all(cfg: Optional[Config] = None,
                 coherence_floor=cfg.coherence_floor))
         T.mark(f"generalized {split}: {gen[split].shape}")
 
+    # ---------------------------------------------- SR-then-downsample (P0)
+    sr: Dict[str, np.ndarray] = {}
+    for split in ("train", "val", "test"):
+        sr[split] = cached(
+            P.cache / f"sr_classical_{split}_{tag}_{len(src.labels(split))}.npy",
+            lambda s=split: SR.classical_sr_upsample_batch(
+                np.asarray(gen[s])[:, :3], target=cfg.native_size,
+                n_jobs=cfg.n_jobs))
+        T.mark(f"SR-upsampled {split}: {sr[split].shape}")
+
+    # -------------------------------------------------------- pan-sharpening
+    psb: Dict[str, np.ndarray] = {}
+    psi: Dict[str, np.ndarray] = {}
+    for split in ("train", "val", "test"):
+        psb[split] = cached(
+            P.cache / f"pansharpen_brovey_{split}_{tag}_{len(src.labels(split))}.npy",
+            lambda s=split: PS.pansharpen_resize_batch(
+                src.images(s), target=cfg.target_size, method="brovey",
+                n_jobs=cfg.n_jobs))
+        psi[split] = cached(
+            P.cache / f"pansharpen_ihs_{split}_{tag}_{len(src.labels(split))}.npy",
+            lambda s=split: PS.pansharpen_resize_batch(
+                src.images(s), target=cfg.target_size, method="ihs",
+                n_jobs=cfg.n_jobs))
+        T.mark(f"pan-sharpened {split}: brovey {psb[split].shape}, "
+              f"ihs {psi[split].shape}")
+
     # -------------------------------------------------------------- ITA
     ita: Dict[str, np.ndarray] = {}
     for split in ("train", "test"):
@@ -121,10 +150,16 @@ def run_all(cfg: Optional[Config] = None,
     T.mark("naive trained")
 
     print("\n-- training: generalized 28²  (full sheet)")
+    # MC-dropout sampling is enabled only on the first seed: it does not need
+    # repeating across seeds the way the ensemble-disagreement signal below
+    # already does, and it costs `cfg.mc_dropout_samples` extra passes over
+    # the test set (see train_eval's docstring).
     results["generalized"] = [train_eval(
         gen["train"], y["train"], gen["val"], y["val"], gen["test"], y["test"],
         regime="generalized", n_classes=n_classes, cfg=cfg, channels=ch_all,
-        aug=aug_gen, seed=s) for s in cfg.seeds]
+        aug=aug_gen, seed=s,
+        mc_dropout_samples=cfg.mc_dropout_samples if s == cfg.seeds[0] else 0)
+        for s in cfg.seeds]
     T.mark("generalized trained")
 
     print("\n-- training: native 224²  (ResNet-18)")
@@ -133,6 +168,43 @@ def run_all(cfg: Optional[Config] = None,
         src.images("test"), y["test"], regime="native224",
         n_classes=n_classes, cfg=cfg, aug=None, seed=s) for s in cfg.seeds]
     T.mark("native224 trained")
+
+    print("\n-- training: SR-then-downsample baseline "
+          "(classical SR of the 28² image, ResNet-18)")
+    results["sr_classical"] = [train_eval(
+        sr["train"], y["train"], sr["val"], y["val"], sr["test"], y["test"],
+        regime="native224", n_classes=n_classes, cfg=cfg, aug=None, seed=s)
+        for s in cfg.seeds]
+    T.mark("SR-classical trained")
+
+    print("\n-- training: learned downsampler baseline "
+          "(linear pooling, initialized to area-mean)")
+    results["learned_pool_linear"] = [train_eval(
+        src.images("train"), y["train"], src.images("val"), y["val"],
+        src.images("test"), y["test"], regime="learned_pool_linear",
+        n_classes=n_classes, cfg=cfg, aug=None, seed=s) for s in cfg.seeds]
+    T.mark("learned_pool_linear trained")
+
+    print("\n-- training: attention-based downsampler baseline")
+    results["learned_pool_attention"] = [train_eval(
+        src.images("train"), y["train"], src.images("val"), y["val"],
+        src.images("test"), y["test"], regime="learned_pool_attention",
+        n_classes=n_classes, cfg=cfg, aug=None, seed=s) for s in cfg.seeds]
+    T.mark("learned_pool_attention trained")
+
+    print("\n-- training: pan-sharpening baseline (Brovey transform)")
+    results["pansharpen_brovey"] = [train_eval(
+        psb["train"], y["train"], psb["val"], y["val"], psb["test"], y["test"],
+        regime="pansharpen", n_classes=n_classes, cfg=cfg, aug=aug_rgb, seed=s)
+        for s in cfg.seeds]
+    T.mark("pansharpen_brovey trained")
+
+    print("\n-- training: pan-sharpening baseline (IHS fusion)")
+    results["pansharpen_ihs"] = [train_eval(
+        psi["train"], y["train"], psi["val"], y["val"], psi["test"], y["test"],
+        regime="pansharpen", n_classes=n_classes, cfg=cfg, aug=aug_rgb, seed=s)
+        for s in cfg.seeds]
+    T.mark("pansharpen_ihs trained")
 
     evals, extras = {}, {}
     for key, res in results.items():
@@ -241,6 +313,16 @@ def run_all(cfg: Optional[Config] = None,
         "softmax confidence": M.coverage_risk(probs.max(1), probs, ty),
         "random": M.coverage_risk(np.random.default_rng(0).random(len(ty)), probs, ty),
     }
+    # Selective prediction / active-learning extension: is the certificate
+    # actually better than general-purpose uncertainty estimation, or does it
+    # just beat plain softmax confidence?
+    seed_probs = [M.softmax(r.test_logits) for r in results["generalized"]]
+    curves["deep ensemble disagreement"] = M.coverage_risk(
+        -M.ensemble_uncertainty(seed_probs), probs, ty)
+    mc_probs = results["generalized"][0].mc_dropout_probs
+    if mc_probs is not None:
+        curves["MC-dropout uncertainty"] = M.coverage_risk(
+            -M.mc_dropout_uncertainty(mc_probs), probs, ty)
     out["coverage_risk"] = {k: {kk: (vv.tolist() if isinstance(vv, np.ndarray) else vv)
                                 for kk, vv in v.items()} for k, v in curves.items()}
     out["certificate_vs_confidence"] = {

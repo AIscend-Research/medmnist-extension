@@ -795,15 +795,32 @@ def fig_certificate(outdir: Path, curves: Dict[str, Dict]) -> Path:
     gs = GridSpec(1, 2, figure=fig, wspace=0.24, left=0.07, right=0.975,
                   top=0.80, bottom=0.14)
     colors = {"source certificate": "#eb6834", "softmax confidence": "#2a78d6",
-              "random": S.INK_3}
+              "deep ensemble disagreement": "#1baf7a",
+              "MC-dropout uncertainty": "#9b59b6", "random": S.INK_3}
 
     ax = fig.add_subplot(gs[0])
     for name, c in curves.items():
         col = colors.get(name, S.INK)
         ax.plot(c["coverage"], c["balanced_risk"], lw=2.0, color=col,
                 ls=(0, (4, 3)) if name == "random" else "-")
-        S.direct_label(ax, c["coverage"][0], c["balanced_risk"][0], name, col,
-                       dx=4, dy=8, fontsize=7.6)
+
+    # Labels are stacked in a fixed-position block in the top-left corner,
+    # ranked by each curve's value at the leftmost coverage point, rather
+    # than pinned to that value's actual height: once more than two or three
+    # trust signals are compared, curves can start anywhere in the axes
+    # (including near the bottom edge), and offsetting a label from its own
+    # data point can push it off the plot into the caption below. A fixed
+    # block avoids both the overlap and the off-plot cases regardless of how
+    # the curves happen to be arranged.
+    ylo, yhi = ax.get_ylim()
+    y0 = yhi - 0.06 * (yhi - ylo)
+    step = 0.075 * (yhi - ylo)
+    x0 = ax.get_xlim()[0] + 0.015 * (ax.get_xlim()[1] - ax.get_xlim()[0])
+    ranked = sorted(curves.items(), key=lambda kv: -kv[1]["balanced_risk"][0])
+    for rank, (name, c) in enumerate(ranked):
+        col = colors.get(name, S.INK)
+        ax.annotate(name, xy=(x0, y0 - rank * step), color=col, fontsize=7.6,
+                   fontweight="bold", va="center", ha="left", family="serif")
     ax.set_xlabel("coverage — fraction of the test set kept", fontsize=8.5)
     ax.set_ylabel("balanced risk on the kept fraction", fontsize=8.5)
     ax.set_title("A · Coverage–risk", loc="left", fontsize=9.8)

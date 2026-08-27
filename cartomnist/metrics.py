@@ -5,6 +5,14 @@ diagram, so calibration is not an afterthought here: every evaluation returns
 temperature-scaled probabilities (temperature fitted on the validation split
 only), the reliability bins needed to draw the diagram, and the coverage-risk
 curve that the sufficiency certificate is scored against.
+
+The certificate is scored against the actual selective-prediction / active-
+learning literature, not just softmax confidence — `mc_dropout_uncertainty`
+(Gal & Ghahramani, 2016) and `ensemble_uncertainty` (Lakshminarayanan,
+Pritzel & Blundell, 2017) give two more general-purpose trust signals for
+`coverage_risk` to rank against; `coverage_risk`/AURC itself is the standard
+selective-classification evaluation (El-Yaniv & Wiener, 2010; Geifman &
+El-Yaniv, 2017).
 """
 from __future__ import annotations
 
@@ -164,6 +172,35 @@ def coverage_risk(score: np.ndarray, probs: np.ndarray, y: np.ndarray,
     return {"coverage": covs, "risk": risks, "balanced_risk": bal,
             "aurc": float(_trapz(risks, covs) / (covs[-1] - covs[0])),
             "balanced_aurc": float(_trapz(bal, covs) / (covs[-1] - covs[0]))}
+
+
+# --------------------------------------------------------------------------
+# General-purpose uncertainty, for the certificate to be scored against
+# --------------------------------------------------------------------------
+def mc_dropout_uncertainty(mc_probs: np.ndarray) -> np.ndarray:
+    """Predictive variance across T stochastic dropout passes, summed over
+    classes — higher means less trustworthy. Gal & Ghahramani (2016),
+    "Dropout as a Bayesian Approximation."
+
+    `mc_probs` is (T, N, C) softmax probabilities from `train.mc_dropout_infer`.
+    """
+    return mc_probs.var(axis=0).sum(axis=1)
+
+
+def ensemble_uncertainty(probs_per_seed: Sequence[np.ndarray]) -> np.ndarray:
+    """Mean KL divergence of each ensemble member from the ensemble mean —
+    an epistemic-disagreement score, higher means less trustworthy.
+    Lakshminarayanan, Pritzel & Blundell (2017), "Simple and Scalable
+    Predictive Uncertainty Estimation using Deep Ensembles."
+
+    `probs_per_seed` is one softmax-probability array per training seed, all
+    (N, C) and aligned on the same test examples.
+    """
+    stacked = np.stack([np.asarray(p) for p in probs_per_seed])   # (S, N, C)
+    mean = stacked.mean(axis=0, keepdims=True)
+    kl = (stacked * (np.log(np.clip(stacked, 1e-12, None))
+                     - np.log(np.clip(mean, 1e-12, None)))).sum(axis=-1)
+    return kl.mean(axis=0)
 
 
 # --------------------------------------------------------------------------

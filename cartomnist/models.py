@@ -10,6 +10,8 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
+from .learned_pool import LearnedDownsample
+
 
 class SmallCNN(nn.Module):
     """Three-stage CNN with GroupNorm, safe at grids from 7x7 to 56x56.
@@ -69,9 +71,29 @@ def resnet18(in_channels: int = 3, n_classes: int = 7, pretrained: bool = False)
     return m
 
 
+class LearnedDownsampleCNN(nn.Module):
+    """`LearnedDownsample` -> `SmallCNN`, trained end-to-end from native-
+    resolution input. See `learned_pool.py` for the pooling layer and
+    `contracts.LEARNED_POOL` for the fidelity contract.
+    """
+
+    def __init__(self, in_channels: int, n_classes: int, factor: int,
+                 mode: str = "linear", width: int = 48, p_drop: float = 0.15):
+        super().__init__()
+        self.pool = LearnedDownsample(in_channels, factor, mode)
+        self.classifier = SmallCNN(in_channels, n_classes, width, p_drop)
+
+    def forward(self, x):
+        return self.classifier(self.pool(x))
+
+
 def build(regime: str, in_channels: int, n_classes: int, **kw) -> nn.Module:
     if regime == "native224":
         return resnet18(in_channels, n_classes, pretrained=kw.get("pretrained", False))
+    if regime in ("learned_pool_linear", "learned_pool_attention"):
+        mode = "linear" if regime.endswith("linear") else "attention"
+        return LearnedDownsampleCNN(in_channels, n_classes, kw.get("factor", 8),
+                                    mode, width=kw.get("width", 48))
     return SmallCNN(in_channels, n_classes, width=kw.get("width", 48))
 
 
