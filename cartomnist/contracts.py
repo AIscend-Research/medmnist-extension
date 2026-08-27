@@ -239,8 +239,112 @@ NAIVE_RESIZE = FidelityContract(
 )
 
 
+SR_UPSAMPLE = FidelityContract(
+    operator="sr_upsample",
+    cartographic_analogue=(
+        "Redrawing a photoreduced 1:1,000,000 sheet back up to 1:10,000 scale "
+        "by interpolation, rather than resurveying the ground — inventing "
+        "plausible detail instead of measuring it."
+    ),
+    preserves=[
+        "the low-frequency content of the shipped 28x28 image",
+        "edge contrast a plain interpolation kernel would smooth away",
+    ],
+    sacrifices=[
+        "fidelity to the true native acquisition — a generic sharpening "
+        "prior's added edges are not guaranteed to correspond to real "
+        "anatomy, only to what a Lanczos-plus-unsharp-mask pipeline finds "
+        "plausible",
+        "any structure genuinely destroyed by the areal averaging that "
+        "produced the 28x28 input in the first place",
+    ],
+    invariant=(
+        "output is a deterministic function of the 28x28 naive-resized image "
+        "alone — the native image and the labels are never read, so a "
+        "measured recovery of the naive/native224 gap can only be credited "
+        "to the upsampling prior, not to smuggled native-resolution access"
+    ),
+    parameters={"method": "Lanczos upsample + unsharp mask"},
+    citation="Dong et al. (2014) SRCNN, for bicubic-upsampling-as-baseline "
+             "convention in the super-resolution literature; Real-ESRGAN "
+             "(Wang et al., 2021) was considered and excluded — see "
+             "cartomnist/superres.py's module docstring",
+)
+
+
+LEARNED_POOL = FidelityContract(
+    operator="learned_pool",
+    cartographic_analogue=(
+        "An adaptive survey grid that spends sampling density wherever the "
+        "cartographer chooses, rather than a fixed one applied uniformly "
+        "over every cell."
+    ),
+    preserves=[
+        "whatever a gradient-trained pooling layer finds useful for the "
+        "downstream classification loss — no fixed guarantee, by design",
+    ],
+    sacrifices=[
+        "the areal-integral invariant area-mean pooling guarantees by "
+        "construction (contracts.AGGREGATION) — this operator is now "
+        "data- and task-dependent rather than a fixed, auditable function",
+        "determinism: the exact pooling rule depends on the training run "
+        "(seed, optimizer trajectory), not just on the pixels",
+    ],
+    invariant=(
+        "mode='linear' initializes to exact area-mean pooling — the pooling "
+        "weight equals 1/factor**2 before any gradient step — so a measured "
+        "gap against the fixed `naive` baseline is attributable to what "
+        "training changes, not to an initialization advantage "
+        "(checked by tests/test_learned_pool.py)"
+    ),
+    parameters={"factor": "native_size / target_size",
+               "mode": "linear (learned uniform weight) | attention "
+                       "(per-pixel softmax weight within each block)"},
+    citation="Lee et al. (2019), 'Set Transformer', for attention pooling; "
+             "Sun et al. (2021), 'Learning to Downsample for Segmentation of "
+             "Ultra-High-Resolution Images', for learned downsampling "
+             "specifically",
+)
+
+PAN_SHARPEN = FidelityContract(
+    operator="pan_sharpen",
+    cartographic_analogue=(
+        "This project's own symbolize-then-fuse pipeline — measure fine "
+        "structure at native resolution, then inject it into the coarser "
+        "product — is structurally the same move as remote-sensing pan-"
+        "sharpening: fusing a high-resolution panchromatic band into "
+        "coarser multispectral bands. This operator makes that comparison "
+        "literal with an actual classical fusion algorithm in place of "
+        "cartographic symbolization."
+    ),
+    preserves=[
+        "high-frequency luminance detail from the native image, injected "
+        "into the upsampled low-resolution color bands before the final "
+        "area-mean pooling step",
+    ],
+    sacrifices=[
+        "spectral fidelity — Brovey and IHS fusion are both known, in the "
+        "remote-sensing literature, to distort color in saturated regions, "
+        "since both assume a PAN-MS correlation a lesion photograph need "
+        "not actually have",
+    ],
+    invariant=(
+        "the fused image, before the final pooling step, is a deterministic "
+        "function of the native image alone — no labels, no training signal "
+        "— exactly like symbolization"
+    ),
+    parameters={"method": "brovey | ihs"},
+    citation="Gillespie, Kahle & Walker (1987) for the Brovey transform; "
+             "Chavez, Sides & Anderson (1991) for IHS fusion; Vivone et al. "
+             "(2015), 'A Critical Comparison Among Pansharpening "
+             "Algorithms', for the general framework this baseline borrows "
+             "from",
+)
+
+
 def legend_dict() -> dict:
     return {
         "generalized": [c.as_dict() for c in OPERATORS],
-        "baseline": [NAIVE_RESIZE.as_dict()],
+        "baseline": [NAIVE_RESIZE.as_dict(), SR_UPSAMPLE.as_dict(),
+                    LEARNED_POOL.as_dict(), PAN_SHARPEN.as_dict()],
     }
