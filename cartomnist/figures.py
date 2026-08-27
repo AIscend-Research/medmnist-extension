@@ -804,15 +804,23 @@ def fig_certificate(outdir: Path, curves: Dict[str, Dict]) -> Path:
         ax.plot(c["coverage"], c["balanced_risk"], lw=2.0, color=col,
                 ls=(0, (4, 3)) if name == "random" else "-")
 
-    # Labels are stacked vertically by their value at the leftmost coverage
-    # point rather than each pinned independently: once more than two or
-    # three trust signals are compared, several curves start near the same
-    # risk and independent labels overlap into an unreadable smear.
+    # Labels are stacked in a fixed-position block in the top-left corner,
+    # ranked by each curve's value at the leftmost coverage point, rather
+    # than pinned to that value's actual height: once more than two or three
+    # trust signals are compared, curves can start anywhere in the axes
+    # (including near the bottom edge), and offsetting a label from its own
+    # data point can push it off the plot into the caption below. A fixed
+    # block avoids both the overlap and the off-plot cases regardless of how
+    # the curves happen to be arranged.
+    ylo, yhi = ax.get_ylim()
+    y0 = yhi - 0.06 * (yhi - ylo)
+    step = 0.075 * (yhi - ylo)
+    x0 = ax.get_xlim()[0] + 0.015 * (ax.get_xlim()[1] - ax.get_xlim()[0])
     ranked = sorted(curves.items(), key=lambda kv: -kv[1]["balanced_risk"][0])
     for rank, (name, c) in enumerate(ranked):
         col = colors.get(name, S.INK)
-        S.direct_label(ax, c["coverage"][0], c["balanced_risk"][0], name, col,
-                       dx=4, dy=14 - 13 * rank, fontsize=7.2)
+        ax.annotate(name, xy=(x0, y0 - rank * step), color=col, fontsize=7.6,
+                   fontweight="bold", va="center", ha="left", family="serif")
     ax.set_xlabel("coverage — fraction of the test set kept", fontsize=8.5)
     ax.set_ylabel("balanced risk on the kept fraction", fontsize=8.5)
     ax.set_title("A · Coverage–risk", loc="left", fontsize=9.8)
