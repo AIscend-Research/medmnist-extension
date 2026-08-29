@@ -152,34 +152,31 @@ if MEDMNIST_INPUT: os.environ["CARTO_DATA_DIR"] = MEDMNIST_INPUT
 
 def _find_isic_subdir(base: str, candidates: list[str]) -> Path:
     # Fail loudly rather than silently skipping: a wrong/typo'd Kaggle input
-    # slug or dataset layout must stop the run, not quietly disable ISIC
-    # validation 2000 seconds in.
-    base_path = Path(base)
-    if not base_path.exists():
-        mounted = (sorted(p.name for p in Path("/kaggle/input").iterdir())
-                   if Path("/kaggle/input").exists() else [])
-        raise RuntimeError(
-            f"ISIC input path {base!r} does not exist. Is that dataset actually "
-            f"attached to this kernel (Add Input on the right)? Check the slug. "
-            f"Currently mounted under /kaggle/input: {mounted}"
-        )
-    for name in candidates:
-        if (base_path / name).exists():
-            return base_path / name
-        hit = next(base_path.glob(f"**/{name}"), None)
+    # slug, a stale mount path, or a dataset layout change must stop the run,
+    # not quietly disable ISIC validation 2000 seconds in. Kaggle has changed
+    # its mount layout before (plain /kaggle/input/<slug> vs. nested under
+    # /kaggle/input/datasets/<owner>/<slug>/versions/<n>/), so treat the
+    # configured base path as a hint, not the only place to look: search all
+    # of /kaggle/input for the target folder name, and only fail if it is
+    # truly nowhere on the box.
+    wanted = {c.lower() for c in candidates}
+    search_roots = [p for p in (Path(base), Path("/kaggle/input")) if p.exists()]
+    for root in search_roots:
+        for name in candidates:
+            if (root / name).exists():
+                return root / name
+        hit = next((p for p in root.glob("**/*")
+                    if p.is_dir() and p.name.lower() in wanted), None)
         if hit is not None:
             return hit
-    # case-insensitive fallback, in case Kaggle's unzip renamed casing
-    wanted = {c.lower() for c in candidates}
-    hit = next((p for p in base_path.glob("**/*")
-                if p.is_dir() and p.name.lower() in wanted), None)
-    if hit is not None:
-        return hit
-    top = sorted(p.name for p in base_path.iterdir())
+    kroot = Path("/kaggle/input")
+    listing = (sorted(str(p.relative_to(kroot)) for p in kroot.glob("**/*")
+                       if p.is_dir())[:200] if kroot.exists() else [])
     raise RuntimeError(
-        f"Could not find any of {candidates} anywhere under {base}. "
-        f"Top-level contents of {base}: {top}. Fix ISIC_IMAGES_INPUT / "
-        f"ISIC_MASKS_INPUT above, or the expected folder name."
+        f"Could not find any of {candidates} under {base!r} or anywhere in "
+        f"/kaggle/input. Is the dataset actually attached to this kernel "
+        f"(Add Input on the right)? Directories currently under /kaggle/input "
+        f"(first 200): {listing}"
     )
 
 if ISIC_IMAGES_INPUT and ISIC_MASKS_INPUT:
