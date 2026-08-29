@@ -300,7 +300,7 @@ out = run_all(cfg)
 
 # ISIC inputs were explicitly configured above -> validation must actually
 # have run. A quiet "available: False" here means hours of GPU time produced
-# a report with Plate XI missing and nobody would notice until it's too late.
+# a report with Figure 12 missing and nobody would notice until it's too late.
 _isic_wired = bool(ISIC_INPUT or (ISIC_IMAGES_INPUT and ISIC_MASKS_INPUT))
 if RUN_ISIC and _isic_wired:
     isic_res = out["isic_validation"]
@@ -308,7 +308,7 @@ if RUN_ISIC and _isic_wired:
         raise RuntimeError(
             "ISIC inputs were configured but validation did not run: "
             f"{isic_res.get('reason')!r}. Fix the inputs and rerun rather than "
-            "shipping a report missing Plate XI."
+            "shipping a report missing Figure 12."
         )
 """),
 
@@ -353,7 +353,7 @@ print(f"\nShortcut test: shuffling symbols across images costs {full - sc:+.4f} 
 
     md(r"""
 ---
-## 7 · The plates
+## 7 · The figures
 
 All twelve, inline.
 """),
@@ -361,18 +361,18 @@ All twelve, inline.
     code(r"""
 from IPython.display import Image, display, Markdown
 titles = {
- "fig00_headline": "Frontispiece — the standard, as one sheet",
- "fig01_legend": "Plate I — the legend",
- "fig02_three_regimes": "Plate II — three ways to publish the same lesion at 28×28",
- "fig03_symbol_atlas": "Plate III — survey sheet: instrument response to symbol",
- "fig04_source_diagram": "Plate IV — the source diagram and the Nyquist audit",
- "fig05_mercator": "Plate V — the Mercator result",
- "fig06_reliability": "Plate VI — reliability diagrams",
- "fig07_topfer": "Plate VII — the radical law as a benchmark scale law",
- "fig08_certificate": "Plate VIII — the certificate as an abstention model",
- "fig09_rare_class": "Plate IX — rare-class recovery",
- "fig10_ablation": "Plate X — ablations, including the shortcut test",
- "fig11_isic_validation": "Plate XI — do the symbols track expert annotation?",
+ "fig00_headline": "Figure 1 — the standard, as one sheet",
+ "fig01_legend": "Figure 2 — the legend",
+ "fig02_three_regimes": "Figure 3 — three ways to publish the same lesion at 28×28",
+ "fig03_symbol_atlas": "Figure 4 — survey sheet: instrument response to symbol",
+ "fig04_source_diagram": "Figure 5 — the source diagram and the Nyquist audit",
+ "fig05_mercator": "Figure 6 — the Mercator result",
+ "fig06_reliability": "Figure 7 — reliability diagrams",
+ "fig07_topfer": "Figure 8 — the radical law as a benchmark scale law",
+ "fig08_certificate": "Figure 9 — the certificate as an abstention model",
+ "fig09_rare_class": "Figure 10 — rare-class recovery",
+ "fig10_ablation": "Figure 11 — ablations, including the shortcut test",
+ "fig11_isic_validation": "Figure 12 — do the symbols track expert annotation?",
 }
 for p in sorted(cfg.paths.figures.glob("fig*.png")):
     display(Markdown(f"### {titles.get(p.stem, p.stem)}"))
@@ -438,12 +438,13 @@ precisely a decision about whose features survive.
 
 ### Caveats owned up front
 
-- **The symbols are only as good as the filter banks.** Plate XI validates three
-  of the five against ISIC 2018 Task 2 expert masks. Vessels and blue-white veil
-  have no ISIC counterpart and are reported as measured-but-unvalidated.
-- **The model could learn the symbols as a new shortcut.** Plate X tests this
-  directly: dropping the symbols at test time, and — the harder test — shuffling
-  them across images to destroy their alignment with the picture.
+- **The symbols are only as good as the filter banks.** Figure 12 validates
+  three of the five against ISIC 2018 Task 2 expert masks. Vessels and
+  blue-white veil have no ISIC counterpart and are reported as
+  measured-but-unvalidated.
+- **The model could learn the symbols as a new shortcut.** Figure 11 tests
+  this directly: dropping the symbols at test time, and — the harder test —
+  shuffling them across images to destroy their alignment with the picture.
 - **Equal fidelity is conditional.** Symbol normalisation is anchored to a
   measured noise floor, so where an image genuinely cannot support a measurement
   the symbol collapses toward zero rather than amplifying noise. That is the
