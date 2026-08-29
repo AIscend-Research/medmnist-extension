@@ -4,7 +4,7 @@
 
 The project already compares its label-free source-diagram certificate
 against softmax confidence for test-time abstention (`pipeline.py`'s
-`certificate_vs_confidence`, Plate VIII). Is the certificate actually better
+`certificate_vs_confidence`, Figure 9). Is the certificate actually better
 than *general-purpose* uncertainty estimation from the selective-prediction
 / active-learning literature — MC-dropout and deep ensembles — or does it
 just beat the weakest baseline (plain softmax)?
@@ -32,7 +32,7 @@ just beat the weakest baseline (plain softmax)?
   `"deep ensemble disagreement"` (from all `cfg.seeds`' softmax outputs) and
   `"MC-dropout uncertainty"` (from the stashed `mc_dropout_probs`), both
   scored the same way via `metrics.coverage_risk`/AURC.
-- `figures.fig_certificate` (Plate VIII) picks up both new curves
+- `figures.fig_certificate` (Figure 9) picks up both new curves
   automatically (the plotting loop is generic over curve names); its
   on-curve labels were re-laid-out (stacked vertically by value, not pinned
   independently) since 5 curves overlapping was unreadable with the

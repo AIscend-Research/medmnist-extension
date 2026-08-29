@@ -272,18 +272,18 @@ def write_html(out: Dict, figures_dir: Path, path: Path) -> Path:
 
     figs = sorted(figures_dir.glob("fig*.png"))
     fig_captions = {
-        "fig00_headline": "Frontispiece — the standard, as one sheet.",
-        "fig01_legend": "Plate I — the legend: named operators and their fidelity contracts.",
-        "fig02_three_regimes": "Plate II — three ways to publish the same lesion at 28×28.",
-        "fig03_symbol_atlas": "Plate III — survey sheet: instrument response to symbol.",
-        "fig04_source_diagram": "Plate IV — the source diagram and the Nyquist audit.",
-        "fig05_mercator": "Plate V — the Mercator result: non-uniform loss by pigmentation.",
-        "fig06_reliability": "Plate VI — reliability diagrams, one per regime.",
-        "fig07_topfer": "Plate VII — Töpfer's radical law as a benchmark scale law.",
-        "fig08_certificate": "Plate VIII — the certificate as an abstention model.",
-        "fig09_rare_class": "Plate IX — rare-class recovery.",
-        "fig10_ablation": "Plate X — ablations, including the shortcut test.",
-        "fig11_isic_validation": "Plate XI — do the symbols track expert annotation?",
+        "fig00_headline": "Figure 1 — the standard, as one sheet.",
+        "fig01_legend": "Figure 2 — the legend: named operators and their fidelity contracts.",
+        "fig02_three_regimes": "Figure 3 — three ways to publish the same lesion at 28×28.",
+        "fig03_symbol_atlas": "Figure 4 — survey sheet: instrument response to symbol.",
+        "fig04_source_diagram": "Figure 5 — the source diagram and the Nyquist audit.",
+        "fig05_mercator": "Figure 6 — the Mercator result: non-uniform loss by pigmentation.",
+        "fig06_reliability": "Figure 7 — reliability diagrams, one per regime.",
+        "fig07_topfer": "Figure 8 — Töpfer's radical law as a benchmark scale law.",
+        "fig08_certificate": "Figure 9 — the certificate as an abstention model.",
+        "fig09_rare_class": "Figure 10 — rare-class recovery.",
+        "fig10_ablation": "Figure 11 — ablations, including the shortcut test.",
+        "fig11_isic_validation": "Figure 12 — do the symbols track expert annotation?",
     }
     fig_html = "".join(
         f"<figure>{_img_tag(p)}<figcaption>{fig_captions.get(p.stem, p.stem)}</figcaption></figure>"
@@ -355,7 +355,7 @@ as a per-image fingerprint rather than as measurement, and the entire result wou
 artefact.</div>
 <div class="caveat"><strong>Filter-bank validity.</strong> {isic_note}</div>
 
-<h2>6 · Plates</h2>
+<h2>6 · Figures</h2>
 {fig_html}
 
 <h2>7 · What this proposes</h2>
