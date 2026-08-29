@@ -266,6 +266,30 @@ def direct_label(ax, x, y, text, color, dx=6, dy=0, fontsize=8.5, weight="bold")
                 va="center", ha="left", family="serif")
 
 
+def direct_labels_declutter(ax, entries, min_gap_frac=0.07, **kwargs) -> None:
+    """direct_label for a group of series that share one edge of the axes.
+
+    Two series can legitimately end at nearly the same value on real data
+    even when a hand-picked smoke-test fixture never happens to produce
+    that -- and a set of direct_label calls with dy=0 then stacks their
+    text on top of each other. Sort by y and push apart anything closer
+    than min_gap_frac of the axis range before labelling, so the group is
+    readable regardless of how close the underlying values land.
+
+    entries: sequence of (x, y, text, color).
+    """
+    ylo, yhi = ax.get_ylim()
+    min_gap = min_gap_frac * (yhi - ylo)
+    placed = sorted(entries, key=lambda e: e[1])
+    for i in range(1, len(placed)):
+        x1, y1, t1, c1 = placed[i]
+        y0 = placed[i - 1][1]
+        if y1 - y0 < min_gap:
+            placed[i] = (x1, y0 + min_gap, t1, c1)
+    for x, y, text, color in placed:
+        direct_label(ax, x, y, text, color, **kwargs)
+
+
 def legend_swatch(ax, entries: Sequence[tuple], loc=(0.02, 0.98), fontsize=7.5,
                   title: str = ""):
     """Hand-drawn legend box in the chart-sheet idiom."""

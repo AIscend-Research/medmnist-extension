@@ -542,6 +542,7 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
     ax = fig.add_subplot(gs[0, :2])
     labs = list(bin_labels)
     x = np.arange(len(labs))
+    end_labels = []
     for r in regimes:
         vals, sems = [], []
         for lab in labs:
@@ -556,7 +557,8 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
                         lw=0)
         if np.isfinite(vals).any():
             j = int(np.flatnonzero(np.isfinite(vals))[-1])
-            S.direct_label(ax, x[j], vals[j], rlabel[r], rcolor[r])
+            end_labels.append((x[j], vals[j], rlabel[r], rcolor[r]))
+    S.direct_labels_declutter(ax, end_labels)
     ax.set_xticks(x)
     ax.set_xticklabels([lab.replace(" (", "\n(") for lab in labs], fontsize=7.4)
     ax.set_ylabel("structure retention  (R² of native map)", fontsize=8.5)
@@ -601,6 +603,7 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
 
     # ---- panel E: symbol dynamic range
     ax = fig.add_subplot(gs[1, 2])
+    end_labels = []
     for r, key in (("generalized_ef", "equal fidelity"),
                    ("generalized_abs", "absolute scale")):
         d = dyn_range.get(r, {})
@@ -612,10 +615,11 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
                 markeredgecolor=S.PAPER, markeredgewidth=1.1)
         if np.isfinite(vals).any():
             j = int(np.flatnonzero(np.isfinite(vals))[-1])
-            S.direct_label(ax, x[j], vals[j], key, rcolor[r], fontsize=7.2)
+            end_labels.append((x[j], vals[j], key, rcolor[r]))
+    ax.set_ylim(0, 1.05)
+    S.direct_labels_declutter(ax, end_labels, fontsize=7.2)
     ax.set_xticks(x); ax.set_xticklabels([f"q{i+1}" for i in range(len(labs))],
                                          fontsize=7.4)
-    ax.set_ylim(0, 1.05)
     ax.set_ylabel("symbol channel p95 (usable range)", fontsize=8)
     ax.set_xlabel("ITA stratum", fontsize=8)
     ax.set_title("C · Why", loc="left", fontsize=9.6)
@@ -707,16 +711,18 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
     ax = fig.add_subplot(gs[0])
     ramp = ["#cde2fb", "#6da7ec", "#2a78d6", "#184f95"]
     res = sorted(curves)
+    end_labels = []
     for i, r in enumerate(res):
         c = ramp[min(i, len(ramp) - 1)]
         ks, aucs = curves[r]["k"], curves[r]["auc"]
         ax.plot(ks, aucs, "-o", color=c, lw=2.0, ms=5,
                 markeredgecolor=S.PAPER, markeredgewidth=1.1)
-        S.direct_label(ax, ks[-1], aucs[-1], f"{r}²", c)
+        end_labels.append((ks[-1], aucs[-1], f"{r}²", c))
         kstar = law["kstar"].get(r)
         if kstar is not None and kstar in ks:
             ax.plot([kstar], [aucs[ks.index(kstar)]], "*", color=S.INK, ms=13,
                     zorder=8)
+    S.direct_labels_declutter(ax, end_labels)
     ax.set_xlabel("K — symbolized structure families retained", fontsize=8.5)
     ax.set_ylabel("test macro AUC", fontsize=8.5)
     ax.set_title("A · Diminishing returns at each scale", loc="left", fontsize=9.8)
