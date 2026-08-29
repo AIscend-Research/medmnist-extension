@@ -1037,8 +1037,13 @@ def fig_isic(outdir: Path, res: Dict) -> Path:
                 color=[S.STRUCTURE_COLOR[a] for a in attrs], alpha=0.45,
                 edgecolor=S.PAPER, linewidth=2)
         ax.axvline(0.5, color=S.BAD, lw=1.2, ls=(0, (4, 3)))
-        ax.text(0.5, len(attrs) - 0.35, " chance", color=S.BAD, fontsize=7.6,
-                va="center")
+        # x in data coordinates (aligned with the dashed line at x=0.5), y
+        # pinned to a fixed axes-fraction height near the top -- a data-
+        # coordinate y is at the mercy of how many categories there are and
+        # how tall their bars are, and previously landed in the same strip
+        # as the x-tick labels just outside the axes.
+        ax.text(0.5, 0.97, " chance", color=S.BAD, fontsize=7.6, va="top",
+                transform=ax.get_xaxis_transform())
         # The pixel-AUC bars carry an error-bar cap that extends past the
         # bar's own tip by `sem`; a value label placed at the tip itself
         # (rather than past the cap) sits underneath that cap line.
