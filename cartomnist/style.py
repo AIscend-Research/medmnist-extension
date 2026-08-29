@@ -116,15 +116,39 @@ def neatline(fig, pad: float = 0.012) -> None:
 
 
 def sheet_title(fig, title: str, subtitle: str = "", plate: str = "") -> None:
-    y = 0.985
+    """A long, unwrapped subtitle set at fig-fraction x=0.5 renders as one
+    line and can run into the corner plate label or off the frame entirely
+    -- the same failure caption() already guards against. Wrap it the same
+    way here.
+
+    The title's vertical position used to be a fixed figure-fraction
+    (0.985), which put the text a fixed FRACTION of the figure's height
+    below the top edge. The neatline border is likewise placed a fixed
+    fraction in from the edge. But the 15pt title's own height is fixed in
+    POINTS, not in figure-fraction -- so on a short figure (small
+    get_size_inches height), that fixed fraction of headroom is fewer
+    absolute points than the glyphs need, and the bold title clips into the
+    border above it. Compute the gap in points, then convert to this
+    figure's own fraction, so short and tall figures get the same real
+    clearance."""
+    import textwrap
+    fig_h_in = fig.get_size_inches()[1]
+    top_gap_in = 24.0 / 72.0
+    y = 1 - top_gap_in / fig_h_in
     if plate:
         fig.text(0.028, y, smallcaps(plate), fontsize=7.5, color=INK_3,
                  va="top", family="serif")
     fig.text(0.5, y, title, fontsize=15, color=INK, ha="center", va="top",
              family="serif", fontweight="bold")
     if subtitle:
-        fig.text(0.5, y - 0.038, subtitle, fontsize=9, color=INK_2, ha="center",
-                 va="top", family="serif", style="italic")
+        fontsize = 9
+        inches = fig.get_size_inches()[0] * 0.86
+        chars = max(40, int(inches / (fontsize * 0.0075)))
+        wrapped = "\n".join(textwrap.wrap(subtitle, chars))
+        title_gap_in = 27.0 / 72.0
+        fig.text(0.5, y - title_gap_in / fig_h_in, wrapped, fontsize=fontsize,
+                 color=INK_2, ha="center", va="top", family="serif",
+                 style="italic", linespacing=1.4)
 
 
 def caption(fig, text: str, y: float = 0.022, width_frac: float = 0.84,

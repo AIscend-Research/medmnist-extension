@@ -529,7 +529,7 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
     S.use_style()
     fig = plt.figure(figsize=(13.6, 9.4))
     gs = GridSpec(2, 3, figure=fig, hspace=0.42, wspace=0.28,
-                  left=0.062, right=0.975, top=0.87, bottom=0.085,
+                  left=0.062, right=0.975, top=0.87, bottom=0.135,
                   height_ratios=[1.15, 1])
 
     regimes = ["naive", "generalized_ef", "generalized_abs"]
@@ -642,7 +642,7 @@ def fig_reliability(outdir: Path, rel: Dict[str, Dict], evals: Dict[str, object]
     keys = [k for k in ("naive", "generalized", "native224") if k in rel]
     fig = plt.figure(figsize=(4.5 * len(keys), 6.3))
     gs = GridSpec(2, len(keys), figure=fig, hspace=0.1, wspace=0.22,
-                  left=0.07, right=0.975, top=0.85, bottom=0.16,
+                  left=0.07, right=0.975, top=0.80, bottom=0.16,
                   height_ratios=[3, 1])
 
     for k, key in enumerate(keys):
@@ -701,7 +701,7 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
     S.use_style()
     fig = plt.figure(figsize=(12.4, 5.4))
     gs = GridSpec(1, 2, figure=fig, wspace=0.24, left=0.07, right=0.975,
-                  top=0.80, bottom=0.14)
+                  top=0.74, bottom=0.20)
 
     curves = law["curves"]
     ax = fig.add_subplot(gs[0])
@@ -791,7 +791,7 @@ def fig_certificate(outdir: Path, curves: Dict[str, Dict]) -> Path:
     S.use_style()
     fig = plt.figure(figsize=(11.6, 5.2))
     gs = GridSpec(1, 2, figure=fig, wspace=0.24, left=0.07, right=0.975,
-                  top=0.80, bottom=0.14)
+                  top=0.74, bottom=0.19)
     colors = {"source certificate": "#eb6834", "softmax confidence": "#2a78d6",
               "deep ensemble disagreement": "#1baf7a",
               "MC-dropout uncertainty": "#9b59b6", "random": S.INK_3}
@@ -860,7 +860,7 @@ def fig_rare_class(outdir: Path, evals: Dict[str, object], rare: Sequence[int],
     keys = [k for k in ("naive", "generalized", "native224") if k in evals]
     fig = plt.figure(figsize=(13.2, 5.6))
     gs = GridSpec(1, 2, figure=fig, wspace=0.22, left=0.06, right=0.975,
-                  top=0.80, bottom=0.16, width_ratios=[1.7, 1])
+                  top=0.74, bottom=0.16, width_ratios=[1.7, 1])
 
     ax = fig.add_subplot(gs[0])
     nC = len(getattr(evals[keys[0]], "per_class_recall"))
@@ -871,11 +871,18 @@ def fig_rare_class(outdir: Path, evals: Dict[str, object], rare: Sequence[int],
         ax.bar(x + (j - (len(keys) - 1) / 2) * w, v, width=w * 0.9,
                color=S.REGIME_COLOR[key], edgecolor=S.PAPER, linewidth=2,
                zorder=3)
-        S.direct_label(ax, x[-1] + (j - (len(keys) - 1) / 2) * w, v[-1],
-                       S.REGIME_LABEL[key], S.REGIME_COLOR[key], dx=8,
-                       dy=(j - 1) * 11, fontsize=7.4)
     for c in rare:
         ax.axvspan(c - 0.45, c + 0.45, color="#e3d9c2", alpha=0.5, zorder=0)
+    # Labels sit at fixed axes-fraction positions in the top-right margin
+    # rather than pinned to the last class's bar height: a rare class can
+    # legitimately have near-zero recall in every regime, and a label
+    # offset from that near-zero point would land on the x-tick labels
+    # below the axes instead of beside the bar.
+    for j, key in enumerate(keys):
+        ax.text(0.985, 0.95 - j * 0.075, S.REGIME_LABEL[key],
+                transform=ax.transAxes, color=S.REGIME_COLOR[key],
+                fontsize=7.6, fontweight="bold", ha="right", va="center",
+                family="serif")
     ax.set_xticks(x)
     ax.set_xticklabels([f"{CLASS_SHORT[i]}\nn={class_counts.get(CLASS_SHORT[i], 0)}"
                         for i in range(nC)], fontsize=7.6)
