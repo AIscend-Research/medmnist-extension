@@ -88,9 +88,16 @@ RUN_ISIC = True      # validates symbols against ISIC 2018 Task 2 masks if prese
 
 # Add these as Kaggle inputs to run with internet DISABLED:
 #   MedMNIST v2 (needs dermamnist_224.npz)  -> set MEDMNIST_INPUT below
-#   ISIC 2018 Task 1-2                      -> set ISIC_INPUT below
+#   ISIC 2018 Task 1-2, single dataset with both the training images and the
+#   Task 2 masks                            -> set ISIC_INPUT below
 MEDMNIST_INPUT = None    # e.g. "/kaggle/input/medmnist2d"
 ISIC_INPUT     = None    # e.g. "/kaggle/input/isic2018-task2"
+
+# Or, if the images and the Task 2 masks come from two separate Kaggle
+# datasets, set these instead and the bootstrap cell below will symlink them
+# together into a directory isic.py can read as one root.
+ISIC_IMAGES_INPUT = None   # dataset containing ISIC2018_Task1-2_Training_Input
+ISIC_MASKS_INPUT  = None   # dataset containing ISIC2018_Task2_Training_GroundTruth_v3
 """),
 
     md(r"""
@@ -103,7 +110,7 @@ will pick it up from `/kaggle/input` without any download.
 """),
 
     code(r"""
-import os, subprocess, sys, importlib
+import os, subprocess, sys
 from pathlib import Path
 
 REPO = "%s"
@@ -142,13 +149,62 @@ import cartomnist
 print("cartomnist", cartomnist.__version__)
 
 if MEDMNIST_INPUT: os.environ["CARTO_DATA_DIR"] = MEDMNIST_INPUT
-if ISIC_INPUT:     os.environ["CARTO_ISIC_DIR"] = ISIC_INPUT
+
+def _find_isic_subdir(base: str, candidates: list[str]) -> Path:
+    # Fail loudly rather than silently skipping: a wrong/typo'd Kaggle input
+    # slug or dataset layout must stop the run, not quietly disable ISIC
+    # validation 2000 seconds in.
+    base_path = Path(base)
+    if not base_path.exists():
+        raise RuntimeError(
+            f"ISIC input path {base!r} does not exist. Is that dataset actually "
+            f"attached to this kernel (Add Input on the right)? Check the slug."
+        )
+    for name in candidates:
+        if (base_path / name).exists():
+            return base_path / name
+        hit = next(base_path.glob(f"**/{name}"), None)
+        if hit is not None:
+            return hit
+    # case-insensitive fallback, in case Kaggle's unzip renamed casing
+    wanted = {c.lower() for c in candidates}
+    hit = next((p for p in base_path.glob("**/*")
+                if p.is_dir() and p.name.lower() in wanted), None)
+    if hit is not None:
+        return hit
+    top = sorted(p.name for p in base_path.iterdir())
+    raise RuntimeError(
+        f"Could not find any of {candidates} anywhere under {base}. "
+        f"Top-level contents of {base}: {top}. Fix ISIC_IMAGES_INPUT / "
+        f"ISIC_MASKS_INPUT above, or the expected folder name."
+    )
+
+if ISIC_IMAGES_INPUT and ISIC_MASKS_INPUT:
+    merged = Path("/kaggle/working/isic_combined")
+    merged.mkdir(parents=True, exist_ok=True)
+    for src_base, candidates in [
+        (ISIC_IMAGES_INPUT, ["ISIC2018_Task1-2_Training_Input"]),
+        (ISIC_MASKS_INPUT, ["ISIC2018_Task2_Training_GroundTruth_v3",
+                             "ISIC2018_Task2_Training_GroundTruth"]),
+    ]:
+        src = _find_isic_subdir(src_base, candidates)
+        dst = merged / src.name
+        if not dst.exists():
+            dst.symlink_to(src)
+    os.environ["CARTO_ISIC_DIR"] = str(merged)
+elif ISIC_INPUT:
+    if not Path(ISIC_INPUT).exists():
+        raise RuntimeError(
+            f"ISIC_INPUT={ISIC_INPUT!r} does not exist. Is that dataset "
+            f"attached to this kernel? Check the slug."
+        )
+    os.environ["CARTO_ISIC_DIR"] = ISIC_INPUT
 
 import torch
 has_mps = getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
 device_name = ("cuda: " + torch.cuda.get_device_name(0) if torch.cuda.is_available()
                else "mps" if has_mps else "cpu")
-print("torch", torch.__version__, "| device that Config(device=\\"auto\\") will pick:",
+print("torch", torch.__version__, "| device that Config(device=\"auto\") will pick:",
       device_name)
 """ % REPO),
 
@@ -241,6 +297,19 @@ print("output   ->", cfg.paths.out)
 print("scratch  ->", cfg.paths.cache, "(never included in the bundle)")
 
 out = run_all(cfg)
+
+# ISIC inputs were explicitly configured above -> validation must actually
+# have run. A quiet "available: False" here means hours of GPU time produced
+# a report with Plate XI missing and nobody would notice until it's too late.
+_isic_wired = bool(ISIC_INPUT or (ISIC_IMAGES_INPUT and ISIC_MASKS_INPUT))
+if RUN_ISIC and _isic_wired:
+    isic_res = out["isic_validation"]
+    if not isic_res.get("available"):
+        raise RuntimeError(
+            "ISIC inputs were configured but validation did not run: "
+            f"{isic_res.get('reason')!r}. Fix the inputs and rerun rather than "
+            "shipping a report missing Plate XI."
+        )
 """),
 
     md(r"""
