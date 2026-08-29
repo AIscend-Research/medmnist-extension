@@ -156,9 +156,12 @@ def _find_isic_subdir(base: str, candidates: list[str]) -> Path:
     # validation 2000 seconds in.
     base_path = Path(base)
     if not base_path.exists():
+        mounted = (sorted(p.name for p in Path("/kaggle/input").iterdir())
+                   if Path("/kaggle/input").exists() else [])
         raise RuntimeError(
             f"ISIC input path {base!r} does not exist. Is that dataset actually "
-            f"attached to this kernel (Add Input on the right)? Check the slug."
+            f"attached to this kernel (Add Input on the right)? Check the slug. "
+            f"Currently mounted under /kaggle/input: {mounted}"
         )
     for name in candidates:
         if (base_path / name).exists():
