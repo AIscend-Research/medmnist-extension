@@ -288,7 +288,7 @@ def fig_legend(outdir: Path) -> Path:
     S.sheet_title(fig, "The Legend",
                   "Named generalization operators and their fidelity contracts. The final "
                   "card is the baseline every MedMNIST-style benchmark ships without one.",
-                  plate="Plate I")
+                  plate="Figure 2")
     S.caption(fig, "Vocabulary after Ratajski (1967), Brassel & Weibel (1988), "
                    "McMaster & Shea (1992). Source-diagram practice after IHO S-4 / S-57. "
                    "Every invariant named here is checked by tests/test_operators.py.",
@@ -354,7 +354,7 @@ def fig_three_regimes(outdir: Path, native: np.ndarray, naive: np.ndarray,
     S.sheet_title(fig, "Three Ways to Publish the Same Lesion at 28×28",
                   "Column 1 is the source survey with the 28×28 cell boundaries drawn on it: "
                   "each benchmark pixel is ~0.71 mm of skin.",
-                  plate="Plate II")
+                  plate="Figure 3")
     S.structure_key(fig, [(k.replace("_", " "), v)
                           for k, v in S.STRUCTURE_COLOR.items()], y=top + 0.022)
     S.caption(fig, "Naive resize discards every structure whose period is below "
@@ -423,7 +423,7 @@ def fig_symbol_atlas(outdir: Path, native_img: np.ndarray, tensor: np.ndarray,
     S.sheet_title(fig, "Survey Sheet: From Instrument Response to Symbol",
                   "Top row: what the fixed filter banks measure at native resolution. "
                   "Bottom row: the same measurement aggregated, displaced and exaggerated onto the 28×28 sheet.",
-                  plate="Plate III")
+                  plate="Figure 4")
     S.caption(fig, "p/2Δ is the structure's period divided by twice the benchmark cell width — "
                    "the Nyquist ratio. Below 1, no resampling scheme can represent the "
                    "structure; it must be symbolized or lost.")
@@ -511,7 +511,7 @@ def fig_source_diagram(outdir: Path, native: np.ndarray, gen: np.ndarray, spec,
     S.sheet_title(fig, "The Source Diagram",
                   "Per-cell zones of confidence, computed from the native image alone — "
                   "no labels, available at test time.",
-                  plate="Plate IV")
+                  plate="Figure 5")
     S.caption(fig, "A navigator has been able to read this inset since the nineteenth century. "
                    "It is the same object as the abstention model: where the survey did not "
                    "support the symbol, the chart says so instead of guessing.")
@@ -624,7 +624,7 @@ def fig_mercator(outdir: Path, mres: List, bin_labels: Sequence[str],
     S.sheet_title(fig, "The Mercator Result",
                   "A uniform rule applied to a non-uniform world produces non-uniform error — "
                   "and says nothing about it.",
-                  plate="Plate V")
+                  plate="Figure 6")
     S.caption(fig, "Retention is measured without a classifier: a ridge probe fitted on the "
                    "training split reconstructs the native structure map from each regime, and "
                    "is scored per test image. Equal fidelity is a design decision inside the "
@@ -686,7 +686,7 @@ def fig_reliability(outdir: Path, rel: Dict[str, Dict], evals: Dict[str, object]
     S.sheet_title(fig, "Reliability Diagrams",
                   "Ship one with every benchmark. Red rungs are the calibration gap; "
                   "temperature fitted on validation only.",
-                  plate="Plate VI")
+                  plate="Figure 7")
     S.caption(fig, "A model that is accurate and badly calibrated is a chart with correct "
                    "soundings and no datum. Both the pre- and post-temperature ECE are "
                    "reported so the scaling cannot hide a miscalibrated model.")
@@ -721,9 +721,6 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
     ax.set_ylabel("test macro AUC", fontsize=8.5)
     ax.set_title("A · Diminishing returns at each scale", loc="left", fontsize=9.8)
     ax.set_xlim(-0.3, max(max(c["k"]) for c in curves.values()) + 1.3)
-    ax.text(0.02, 0.04, "star marks K*, first K within "
-                        f"{law['frac_of_max']:.0%} of the best AUC at that scale",
-            transform=ax.transAxes, fontsize=7, color=S.INK_2)
 
     ax = fig.add_subplot(gs[1])
     rs = np.array(sorted(law["kstar"]), dtype=float)
@@ -733,7 +730,7 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
         ax.text(0.5, 0.5, "no resolution produced a usable K*\n"
                           "(every symbol budget scored within noise of the others)",
                 ha="center", va="center", fontsize=9, color=S.INK_2)
-        S.sheet_title(fig, "The Radical Law, Applied to Benchmarks", "", plate="Plate VII")
+        S.sheet_title(fig, "The Radical Law, Applied to Benchmarks", "", plate="Figure 8")
         S.neatline(fig)
         return S.save(fig, outdir / "fig07_topfer.png")
     ax.plot(rs, ks, "o", color="#eb6834", ms=9, markeredgecolor=S.PAPER,
@@ -778,9 +775,10 @@ def fig_topfer(outdir: Path, law: Dict) -> Path:
     S.sheet_title(fig, "The Radical Law, Applied to Benchmarks",
                   "Töpfer & Pillewizer (1966) computed how many features a map should keep "
                   "when its scale drops. The same question has an answer for benchmarks.",
-                  plate="Plate VII")
-    S.caption(fig, "If K* tracks √r, a benchmark designer can compute the symbol budget for a "
-                   "chosen resolution rather than guessing it. A steeper exponent means low-"
+                  plate="Figure 8")
+    S.caption(fig, f"Star marks K*, the first K within {law['frac_of_max']:.0%} of the best AUC at "
+                   "that scale. If K* tracks √r, a benchmark designer can compute the symbol budget "
+                   "for a chosen resolution rather than guessing it. A steeper exponent means low-"
                    "resolution grids saturate on symbols faster than cartographic practice predicts.")
     S.neatline(fig)
     return S.save(fig, outdir / "fig07_topfer.png")
@@ -844,7 +842,7 @@ def fig_certificate(outdir: Path, curves: Dict[str, Dict]) -> Path:
     S.sheet_title(fig, "The Certificate Is the Abstention Model",
                   "Ranking by the source diagram — computed from the image alone, before any "
                   "prediction — against ranking by the model's own confidence.",
-                  plate="Plate VIII")
+                  plate="Figure 9")
     S.caption(fig, "The certificate is available for an unlabelled image and does not depend "
                    "on the classifier, so it can be published with the dataset rather than "
                    "refitted per model. Where it beats softmax confidence, the dataset itself "
@@ -919,7 +917,7 @@ def fig_rare_class(outdir: Path, evals: Dict[str, object], rare: Sequence[int],
     S.sheet_title(fig, "Was the Resolution Problem Ever About Pixels?",
                   "If a 28×28 sheet with a legend recovers what 224×224 recovers, the "
                   "benchmark never needed to be bigger.",
-                  plate="Plate IX")
+                  plate="Figure 10")
     S.neatline(fig)
     return S.save(fig, outdir / "fig09_rare_class.png")
 
@@ -964,7 +962,7 @@ def fig_ablation(outdir: Path, ab: Dict[str, Dict[str, float]]) -> Path:
                   "Dashed line = the full generalized sheet. Red rows are the shortcut tests: "
                   "if performance survives destroying the symbols' alignment to the image, "
                   "the model was reading a shortcut, not evidence.",
-                  plate="Plate X")
+                  plate="Figure 11")
     S.caption(fig, "Dropping the symbols at test time should hurt. Shuffling the symbol "
                    "channels across images should hurt at least as much — if it does not, the "
                    "symbols were acting as a per-image fingerprint rather than as measurement.")
@@ -1026,7 +1024,7 @@ def fig_isic(outdir: Path, res: Dict) -> Path:
     S.sheet_title(fig, "Do the Symbols Track What Dermatologists Annotate?",
                   "Pixel AUC: does the symbol rank annotated cells above unannotated ones "
                   "within an image. Image AUC: does symbol density separate present from absent.",
-                  plate="Plate XI")
+                  plate="Figure 12")
     S.neatline(fig)
     return S.save(fig, outdir / "fig11_isic_validation.png")
 
@@ -1120,7 +1118,7 @@ def fig_headline(outdir: Path, evals: Dict[str, object], law: Dict,
                   "A medical imaging benchmark should ship (a) named generalization operators "
                   "with fidelity contracts, (b) a scale bar in physical units, and "
                   "(c) a reliability diagram.",
-                  plate="Frontispiece")
+                  plate="Figure 1")
     S.caption(fig, "Every existing MedMNIST-style dataset is auditable against this standard.")
     S.neatline(fig)
     return S.save(fig, outdir / "fig00_headline.png")
