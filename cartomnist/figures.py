@@ -816,6 +816,13 @@ def fig_certificate(outdir: Path, curves: Dict[str, Dict]) -> Path:
     # data point can push it off the plot into the caption below. A fixed
     # block avoids both the overlap and the off-plot cases regardless of how
     # the curves happen to be arranged.
+    #
+    # The block's own corner is not guaranteed clear of the curves
+    # themselves, though: real coverage-risk curves are often noisiest at
+    # the smallest coverage values, which is exactly where this block sits.
+    # An opaque paper-coloured backing behind each label keeps it legible
+    # no matter what data crosses behind it, rather than trying to find a
+    # corner that is safe for every possible dataset.
     ylo, yhi = ax.get_ylim()
     y0 = yhi - 0.06 * (yhi - ylo)
     step = 0.075 * (yhi - ylo)
@@ -824,7 +831,9 @@ def fig_certificate(outdir: Path, curves: Dict[str, Dict]) -> Path:
     for rank, (name, c) in enumerate(ranked):
         col = colors.get(name, S.INK)
         ax.annotate(name, xy=(x0, y0 - rank * step), color=col, fontsize=7.6,
-                   fontweight="bold", va="center", ha="left", family="serif")
+                   fontweight="bold", va="center", ha="left", family="serif",
+                   zorder=20, bbox=dict(facecolor=S.PAPER, edgecolor="none",
+                                         pad=1.2))
     ax.set_xlabel("coverage — fraction of the test set kept", fontsize=8.5)
     ax.set_ylabel("balanced risk on the kept fraction", fontsize=8.5)
     ax.set_title("A · Coverage–risk", loc="left", fontsize=9.8)
@@ -916,21 +925,26 @@ def fig_rare_class(outdir: Path, evals: Dict[str, object], rare: Sequence[int],
     ax.invert_yaxis(); ax.grid(axis="y", visible=False)
     ax.set_title("B · Headline", loc="left", fontsize=9.6)
 
-    # recovery fraction annotation
+    # recovery fraction: was drawn as free text at a fixed negative-axes-
+    # fraction position below panel B, which put it right where that
+    # panel's own x-tick labels live -- the two collided. Fold it into the
+    # sheet-level caption instead, which is laid out with real headroom
+    # below the neatline and can never be crossed by an axis's own ticks.
+    caption = None
     if all(k in evals for k in ("naive", "generalized", "native224")):
         n_, g_, t_ = (float(getattr(evals[k], "rare_recall"))
                       for k in ("naive", "generalized", "native224"))
         if np.isfinite([n_, g_, t_]).all() and abs(t_ - n_) > 1e-6:
             frac = (g_ - n_) / (t_ - n_)
-            ax.text(0.02, -0.16, f"Generalized 28² recovers {frac:+.0%} of the "
-                                 f"rare-class recall gap that 224² recovers.",
-                    transform=ax.transAxes, fontsize=8.6, color=S.INK,
-                    fontweight="bold")
+            caption = (f"Generalized 28² recovers {frac:+.0%} of the rare-class "
+                       f"recall gap that 224² recovers.")
 
     S.sheet_title(fig, "Was the Resolution Problem Ever About Pixels?",
                   "If a 28×28 sheet with a legend recovers what 224×224 recovers, the "
                   "benchmark never needed to be bigger.",
                   plate="Figure 10")
+    if caption:
+        S.caption(fig, caption)
     S.neatline(fig)
     return S.save(fig, outdir / "fig09_rare_class.png")
 
@@ -988,8 +1002,16 @@ def fig_ablation(outdir: Path, ab: Dict[str, Dict[str, float]]) -> Path:
 # ==========================================================================
 def fig_isic(outdir: Path, res: Dict) -> Path:
     S.use_style()
+    caption = None
     fig = plt.figure(figsize=(10.4, 5.0))
-    ax = fig.add_subplot(111)
+    # Every other figure reserves header/footer room via an explicit
+    # GridSpec top=/bottom=; this one used to hand matplotlib's default
+    # margins straight to add_subplot, which left the sheet title and
+    # subtitle almost no clearance and they were drawn straight over the
+    # top bar.
+    gs = GridSpec(1, 1, figure=fig, left=0.09, right=0.975, top=0.74,
+                  bottom=0.16)
+    ax = fig.add_subplot(gs[0])
     if not res.get("available"):
         ax.axis("off")
         ax.text(0.5, 0.6, "ISIC 2018 Task 2 attribute masks not available",
@@ -1017,9 +1039,13 @@ def fig_isic(outdir: Path, res: Dict) -> Path:
         ax.axvline(0.5, color=S.BAD, lw=1.2, ls=(0, (4, 3)))
         ax.text(0.5, len(attrs) - 0.35, " chance", color=S.BAD, fontsize=7.6,
                 va="center")
-        for yy, v in zip(y - 0.19, px):
+        # The pixel-AUC bars carry an error-bar cap that extends past the
+        # bar's own tip by `sem`; a value label placed at the tip itself
+        # (rather than past the cap) sits underneath that cap line.
+        for yy, v, s in zip(y - 0.19, px, sem):
             if np.isfinite(v):
-                ax.text(v, yy, f"  {v:.3f}  pixel", va="center", fontsize=7.4,
+                ax.text(v + (s if np.isfinite(s) else 0), yy,
+                        f"  {v:.3f}  pixel", va="center", fontsize=7.4,
                         color=S.INK, fontweight="bold")
         for yy, v in zip(y + 0.19, im):
             if np.isfinite(v):
@@ -1030,14 +1056,15 @@ def fig_isic(outdir: Path, res: Dict) -> Path:
         ax.invert_yaxis(); ax.grid(axis="y", visible=False)
         ax.set_xlim(0.3, 1.0)
         ax.set_xlabel("AUC against expert annotation", fontsize=8.5)
-        ax.text(0.0, -0.16, f"n = {res['n_images']} ISIC 2018 images · uncovered "
-                            f"ISIC attributes: {', '.join(res['uncovered_attributes'])}",
-                transform=ax.transAxes, fontsize=7.6, color=S.INK_2)
+        caption = (f"n = {res['n_images']} ISIC 2018 images · uncovered "
+                   f"ISIC attributes: {', '.join(res['uncovered_attributes'])}")
 
     S.sheet_title(fig, "Do the Symbols Track What Dermatologists Annotate?",
                   "Pixel AUC: does the symbol rank annotated cells above unannotated ones "
                   "within an image. Image AUC: does symbol density separate present from absent.",
                   plate="Figure 12")
+    if caption:
+        S.caption(fig, caption)
     S.neatline(fig)
     return S.save(fig, outdir / "fig11_isic_validation.png")
 
