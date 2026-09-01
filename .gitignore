@@ -15,5 +15,4 @@ notebooks/fig*.png
 notebooks/*_EXECUTED.ipynb
 *.npy
 *.npz
-*.zip
 .DS_Store
